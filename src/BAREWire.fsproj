@@ -13,13 +13,7 @@
     <Compile Include="Core/Binary.fs" />
     <Compile Include="Core/Uuid.fs" />
 
-    <!-- Core Time Implementation -->
-    <Compile Include="Core/Time/NativeInterop.fs" />
-    <Compile Include="Core/Time/Platform.fs" />
-    <Compile Include="Core/Time/WindowsTime.fs" />
-    <Compile Include="Core/Time/LinuxTime.fs" />
-    <Compile Include="Core/Time/MacOSTime.fs" />
-    <Compile Include="Core/Time/Integration.fs" />
+    <!-- Core Time -->
     <Compile Include="Core/Time.fs" />
     
     <!-- Memory -->
@@ -32,44 +26,26 @@
     <Compile Include="Encoding/Encoder.fs" />
     <Compile Include="Encoding/Decoder.fs" />
     <Compile Include="Encoding/Codec.fs" />
-    
-    <!-- Network -->
-    <Compile Include="Network/Frame.fs" />
-    <Compile Include="Network/Transport.fs" />
-    <Compile Include="Network/Protocol.fs" />
-    
-    <!-- IPC -->
-    <Compile Include="IPC/SharedMemory.fs" />
-    <Compile Include="IPC/MessageQueue.fs" />
-    <Compile Include="IPC/NamedPipe.fs" />
-    
+
     <!-- Schema -->
     <Compile Include="Schema/Definition.fs" />
     <Compile Include="Schema/Validation.fs" />
     <Compile Include="Schema/Analysis.fs" />
     <Compile Include="Schema/DSL.fs" />
-    
-    <!-- Platform -->
-    <Compile Include="Platform/Common/Interfaces.fs" />
-    <Compile Include="Platform/Common/Registry.fs" />
-    <Compile Include="Platform/Common/Resource.fs" />
-    <Compile Include="Platform/Providers/InMemory.fs" />
-    <Compile Include="Platform/Providers/Windows.fs" />
-    <Compile Include="Platform/Providers/Linux.fs" />
-    <Compile Include="Platform/Providers/MacOS.fs" />
-    <Compile Include="Platform/Providers/Android.fs" />
-    <Compile Include="Platform/Providers/iOS.fs" />
-    <Compile Include="Platform/Providers/WebAssembly.fs" />
-    <Compile Include="Platform/PlatformServices.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="FSharp.UMX" Version="1.0.0" />
-    <Reference Include="Alloy">
-      <HintPath>D:\repos\Alloy\src\bin\Debug\net8.0\Alloy.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
   </ItemGroup>
+
+  <!--
+    NOTE: BAREWire depends on Alloy which uses .fidproj format (compiled by Firefly).
+    For dotnet builds, a shadow Alloy.fsproj would be needed, or BAREWire
+    must be compiled as part of the Fidelity toolchain.
+
+    The architectural cleanup removed Platform/ providers - those implementations
+    should be provided by Alex bindings, not by BAREWire directly.
+  -->
 
   <PropertyGroup>
     <Authors>Houston Haynes</Authors>

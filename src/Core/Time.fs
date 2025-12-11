@@ -1,7 +1,7 @@
 namespace BAREWire.Core
 
-open BAREWire.Core.Time.Integration
 open Alloy
+open Alloy.Primitives
 
 /// <summary>
 /// Pure F# time utilities with no System.DateTime dependencies
@@ -81,7 +81,7 @@ module Time =
     /// </summary>
     /// <returns>The current time in ticks</returns>
     let currentTicks (): int64 =
-        getCurrentTicks()
+        Alloy.Primitives.getCurrentTicks()
     
     /// <summary>
     /// Gets the current Unix timestamp (seconds since 1970-01-01)
@@ -108,14 +108,14 @@ module Time =
     /// </summary>
     /// <returns>The current high-resolution ticks</returns>
     let highResolutionTicks (): int64 =
-        getHighResolutionTicks()
+        Alloy.Primitives.getMonotonicTicks()
         
     /// <summary>
     /// Gets the frequency of the high-resolution performance counter
     /// </summary>
     /// <returns>The frequency in ticks per second</returns>
     let tickFrequency (): int64 =
-        getTickFrequency()
+        Alloy.Primitives.getTickFrequency()
         
     /// <summary>
     /// Calculates elapsed time between two high-resolution tick values
@@ -352,7 +352,7 @@ module Time =
     /// </summary>
     /// <returns>The current UTC time</returns>
     let utcNow (): DateTime =
-        let ticks = getUtcNow()
+        let ticks = Alloy.Primitives.getCurrentTicks()
         let timestamp = (ticks - unixEpochTicks) / ticksPerSecond
         unixTimestampToDateTime timestamp
     
@@ -514,7 +514,7 @@ module Time =
     /// </summary>
     /// <param name="milliseconds">The number of milliseconds to sleep</param>
     let sleep (milliseconds: int): unit =
-        sleep milliseconds
+        Alloy.Primitives.sleep milliseconds
     
     /// <summary>
     /// Writes a DateTime to a byte array
