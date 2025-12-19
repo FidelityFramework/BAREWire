@@ -28,11 +28,11 @@ BAREWire is part of the **Fidelity** native F# compilation ecosystem:
 
 | Project | Role |
 |---------|------|
-| **[Firefly](https://github.com/speakez-llc/firefly)** | AOT compiler: F# → PSG → MLIR → Native binary |
-| **[Alloy](https://github.com/speakez-llc/alloy)** | Native standard library with platform bindings |
+| **[Firefly](https://github.com/speakeztech/firefly)** | AOT compiler: F# → PSG → MLIR → Native binary |
+| **[Alloy](https://github.com/speakeztech/alloy)** | Native standard library with platform bindings |
 | **BAREWire** | Binary encoding, memory mapping, zero-copy IPC |
-| **[Farscape](https://github.com/speakez-llc/farscape)** | C/C++ header parsing for native library bindings |
-| **[XParsec](https://github.com/speakez-llc/xparsec)** | Parser combinators powering PSG traversal and header parsing |
+| **[Farscape](https://github.com/speakeztech/farscape)** | C/C++ header parsing for native library bindings |
+| **[XParsec](https://github.com/speakeztech/xparsec)** | Parser combinators powering PSG traversal and header parsing |
 
 The name "Fidelity" reflects the framework's core mission: **preserving type and memory safety** from source code through compilation to native execution.
 

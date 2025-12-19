@@ -51,8 +51,8 @@
     <Authors>Houston Haynes</Authors>
     <Description>BAREWire is a modular system with several core components that work together to provide a comprehensive solution for binary data encoding, memory mapping, and communication.</Description>
     <PackageLicenseExpression>None</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/speakez-llc/BAREWire</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/speakez-llc/BAREWire</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/speakeztech/BAREWire</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/speakeztech/BAREWire</RepositoryUrl>
     <PackageTags>binary;serialization;bare;memory-mapping;ipc</PackageTags>
     <Version>0.1.0</Version>
   </PropertyGroup>
