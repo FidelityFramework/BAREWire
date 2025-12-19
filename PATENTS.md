@@ -4,13 +4,13 @@ This file contains pending patent notices and license grants for the BAREWire pr
 
 ## Patents
 
-The following patents are owned by SpeakEZ LLC and are applicable to the BAREWire software:
+The following patents are owned by SpeakEZ Technologies, Inc. and are applicable to the BAREWire software:
 
 1. "System and Method for Zero-Copy Inter-Process Communication Using BARE Protocol" - U.S. Provisional Patent Application No. 63/786,247
 
 ## Patent Grant
 
-Subject to the terms and conditions of the applicable license agreement (either the Apache License 2.0 or a Commercial License), a patent license is granted by SpeakEZ LLC to the recipients of BAREWire software.
+Subject to the terms and conditions of the applicable license agreement (either the Apache License 2.0 or a Commercial License), a patent license is granted by SpeakEZ Technologies, Inc. to the recipients of BAREWire software.
 
 ### Apache License 2.0 Patent Grant
 
@@ -28,7 +28,7 @@ If you are using BAREWire under a Commercial License, the patent license you rec
 
 For further information regarding patent licensing, or to inquire about Commercial Licensing options, please contact:
 
-[SpeakEZ LLC](https://speakez.ai/contact)
+[SpeakEZ Technologies, Inc.](https://speakez.tech/contact)
 
 ## Defensive Termination
 
@@ -41,4 +41,4 @@ This PATENTS.md file is separate from and in addition to the COPYRIGHT and LICEN
 For information about obtaining a Commercial License, please refer to the
 Commercial.md file included with this software or contact:
 
-[SpeakEZ LLC](https://speakez.ai/contact)
+[SpeakEZ Technologies, Inc.](https://speakez.tech/contact)

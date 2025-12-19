@@ -45,7 +45,7 @@ BAREWire Commercial Licenses are available in several tiers:
 
 To discuss your specific needs and obtain pricing information for a Commercial License, please contact:
 
-[SpeakEZ LLC](https://speakez.ai/contact)
+[SpeakEZ Technologies, Inc.](https://speakez.tech/contact)
 
 When contacting us, please provide:
 1. Your organization name
