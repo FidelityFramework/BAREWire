@@ -2,6 +2,10 @@
 
 BAREWire is designed as a modular system with several core components that work together to provide a comprehensive solution for binary data encoding, memory mapping, and communication.
 
+> **Architecture Update (December 2024)**: BAREWire participates in the **quotation-based memory architecture** for the Fidelity framework.
+> Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns using BAREWire types.
+> See `~/repos/Firefly/docs/Quotation_Based_Memory_Architecture.md` for the unified four-component architecture.
+
 ## Project Structure 
 
 BAREWire/

@@ -1,5 +1,11 @@
 # BAREWire Hardware Memory Descriptor System
 
+## The "Fidelity" Principle
+
+> **The entire point of Fidelity is that the F# compiler controls memory layout - not MLIR, not LLVM.**
+
+Types (including memory region types, access kinds, and peripheral descriptors) carry semantic meaning through the entire compilation pipeline. They ARE erased - but at the **last possible lowering stage**, after Fidelity has made all memory layout decisions. **Fidelity dictates; LLVM implements.**
+
 ## Status: NOT YET IMPLEMENTED
 
 The types and concepts described below are the **design specification** for what BAREWire needs

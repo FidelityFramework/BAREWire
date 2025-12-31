@@ -1,5 +1,11 @@
 # BAREWire's Role in Native Library Binding
 
+## The "Fidelity" Principle
+
+> **The entire point of Fidelity is that the F# compiler controls memory layout - not MLIR, not LLVM.**
+
+BAREWire's memory descriptors carry semantic meaning through the compilation pipeline. They guide every memory layout decision Fidelity makes, and are erased only at the last possible lowering stage. **Fidelity dictates; LLVM implements.**
+
 ## Position in the Architecture
 
 BAREWire is the **memory description vocabulary** for the Fidelity binding system:
