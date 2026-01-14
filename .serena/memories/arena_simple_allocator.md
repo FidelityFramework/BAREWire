@@ -32,9 +32,12 @@ Console.writeln $"Hello, {name}!"     // Still valid!
 
 ## Location
 
-- Type: `BAREWire.Core.Capability.Arena<'lifetime>`
-- Module: `BAREWire.Core.Capability.Arena`
-- Docs: `BAREWire/docs/Arena_Design.md`
+> **Status (January 2026)**: Arena was elevated from BAREWire to an FNCS intrinsic type when its broader applicability was recognized. The design document remains in BAREWire as authoritative reference.
+
+- Type: FNCS intrinsic `Arena<[<Measure>] 'lifetime>` with `NTUCompound(3)` layout
+- Definition: `~/repos/fsnative/src/Compiler/Checking.Native/NativeGlobals.fs`
+- Operations: `~/repos/fsnative/src/Compiler/Checking.Native/Expressions/Intrinsics.fs`
+- Design Doc: `BAREWire/docs/Arena_Design.md` (authoritative reference)
 
 ## Operations
 
@@ -60,3 +63,8 @@ Arena is for applications that need memory outliving function calls but don't ne
 ## Usage Note
 
 Arena does NOT allocate backing memory itself - caller must provide via `NativePtr.stackalloc` or future heap intrinsics. This keeps allocation explicit and controllable.
+
+## Reference
+
+- SpeakEZ Blog: "Lifetime Inference" (January 2026) - Three-level design
+- See `arena_intrinsic_architecture` memory in Firefly for implementation details

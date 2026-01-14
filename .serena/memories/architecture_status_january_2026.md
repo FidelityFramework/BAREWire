@@ -45,10 +45,16 @@ Uses capability-based memory with measure types for:
 3. **Concatenation** → must allocate with appropriate lifetime
 4. **writeln argument** → borrows capability for I/O duration
 
-## Next Steps
-- Integrate with Firefly HelloWorld sample
-- Demonstrate BAREWire memory management patterns
-- Fix readln stack lifetime issue
+## Completed (January 2026)
+
+- ✅ **readln stack lifetime issue SOLVED** - Arena elevated to FNCS intrinsic
+- ✅ **Sample 02 (HelloWorldSaturated)** demonstrates full Arena lifecycle
+- ✅ **Arena.fromPointer, alloc, etc.** working in native compilation
+
+## Future Work
+
+- Level 2 hints: `arena { }` computation expression, `[<UseArena>]` attribute  
+- Level 1 inference: Full escape analysis for automatic arena injection
 
 ## Related Memories
 - `wren_stack_integration` - WREN stack WebSocket communication
