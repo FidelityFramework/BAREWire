@@ -7,6 +7,7 @@ description = "Binary data encoding, memory mapping, and communication."
 [build]
 sources = [
     "Core/Types.fs",
+    "Core/Capability.fs",
     "Core/Memory.fs",
     "Core/Error.fs",
     "Core/Utf8.fs",

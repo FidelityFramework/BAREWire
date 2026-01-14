@@ -290,3 +290,19 @@ module Capability =
         /// </summary>
         let inline toStringCap (buf: BufferCap<byte, 'lifetime>) : StringCap<'lifetime> =
             { Data = buf.Data; Length = buf.Position }
+
+    // ============================================================================
+    // ARENA TYPE (FNCS Intrinsic)
+    // ============================================================================
+    //
+    // Arena<'lifetime> is now an FNCS intrinsic type, not a library type.
+    // The type and operations (Arena.fromPointer, Arena.alloc, Arena.allocAligned,
+    // Arena.remaining, Arena.reset) are provided by FNCS.
+    //
+    // Usage remains the same:
+    //   let mutable arena = Arena.fromPointer ptr 4096
+    //   let ptr = Arena.alloc &arena 256
+    //
+    // The lifetime measure parameter tracks the arena's scope at compile time.
+    // All allocations from an arena share its lifetime.
+    // ============================================================================
