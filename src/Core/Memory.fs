@@ -1,299 +1,201 @@
 namespace BAREWire.Core
 
 open FSharp.UMX
+#if !FABLE
 open FSharp.NativeInterop
+#endif
 
 /// <summary>
-/// Core memory types and operations
+/// Core memory abstractions for BAREWire.
 /// </summary>
+/// <remarks>
+/// This module contains two categories of types:
+///
+/// **Dual-Target (Firefly + Fable):**
+/// - Buffer: Sequential write buffer used by Encoding module for WREN stack
+///
+/// **Firefly-Only:**
+/// - Memory&lt;'T,'region&gt;: Capability-based memory with region/lifetime tracking
+/// - fromNativePointer: Native pointer interop
+///
+/// The dual-target Buffer enables BAREWire encoding over WebSocket in WREN stack apps.
+/// The Firefly-only Memory types provide compile-time memory safety guarantees.
+/// </remarks>
 [<AutoOpen>]
 module Memory =
-    /// <summary>
-    /// Creates an int with offset measure
-    /// </summary>
-    let inline private ofInt<[<Measure>] 'u> (i: int) : int<'u> =
-        i * 1<_>
+
+    // ============================================================================
+    // MEMORY TYPE (Firefly only - capability-based memory model)
+    // ============================================================================
     
     /// <summary>
-    /// Converts a measured int to raw int
+    /// A typed view into a memory buffer.
+    /// Uses measure types for region and lifetime safety.
     /// </summary>
-    let inline private toInt<[<Measure>] 'u> (i: int<'u>) : int =
-        int i
-        
-    /// <summary>
-    /// Adds two measured ints of the same measure
-    /// </summary>
-    let inline private addMeasured<[<Measure>] 'u> (a: int<'u>) (b: int<'u>) : int<'u> =
-        ofInt<'u> (toInt a + toInt b)
-        
-    /// <summary>
-    /// Multiplies an int by a measured int, maintaining the measure
-    /// </summary>
-    let inline private multiplyMeasured<[<Measure>] 'u> (a: int) (b: int<'u>) : int<'u> =
-        ofInt<'u> (a * toInt b)
-        
-    /// <summary>
-    /// Negates a measured int, maintaining the measure
-    /// </summary>
-    let inline private negativeMeasured<[<Measure>] 'u> (a: int<'u>) : int<'u> =
-        ofInt<'u> (-toInt a)
-        
-    /// <summary>
-    /// Compares two measured ints
-    /// </summary>
-    let inline private lessThanMeasured<[<Measure>] 'u> (a: int<'u>) (b: int<'u>) : bool =
-        toInt a < toInt b
-        
-    /// <summary>
-    /// Compares two measured ints
-    /// </summary>
-    let inline private greaterThanMeasured<[<Measure>] 'u> (a: int<'u>) (b: int<'u>) : bool =
-        toInt a > toInt b
-        
-    /// <summary>
-    /// A region of memory with type safety
-    /// </summary>
-    /// <typeparam name="'T">The type associated with this memory</typeparam>
-    /// <typeparam name="'region">The memory region measure type</typeparam>
+    /// <typeparam name="'T">The logical type this memory represents</typeparam>
+    /// <typeparam name="'region">Memory region marker (prevents cross-region errors)</typeparam>
     [<Struct>]
-    type Memory<'T, [<Measure>] 'region> =
-        { /// <summary>The underlying data buffer</summary>
-          Data: byte[]
-          /// <summary>The starting offset within the buffer</summary>
-          Offset: int<offset>
-          /// <summary>The length in bytes</summary>
-          Length: int<bytes> }
-    
+    type Memory<'T, [<Measure>] 'region> = {
+        /// <summary>
+        /// The underlying byte storage
+        /// </summary>
+        Data: byte[]
+        
+        /// <summary>
+        /// Offset into the data array in bytes
+        /// </summary>
+        Offset: int<offset>
+        
+        /// <summary>
+        /// Length of this view in bytes
+        /// </summary>
+        Length: int<bytes>
+    }
+
+    // ============================================================================
+    // BUFFER TYPE (Dual-target: Firefly + Fable)
+    // Used by Encoding module for WREN stack WebSocket communication
+    // ============================================================================
+
     /// <summary>
-    /// A memory buffer that can be written to
+    /// A mutable buffer for sequential writes.
+    /// Uses struct for value semantics and stack allocation.
     /// </summary>
-    /// <typeparam name="'T">The type associated with this buffer</typeparam>
+    /// <remarks>
+    /// This type is available in both Firefly and Fable targets.
+    /// In WREN stack apps, it enables BAREWire encoding for WebSocket IPC.
+    /// </remarks>
     [<Struct>]
-    type Buffer<'T> =
-        { /// <summary>The underlying data buffer</summary>
-          Data: byte[]
-          /// <summary>The current write position</summary>
-          mutable Position: int<offset> }
+    type Buffer = {
+        /// <summary>
+        /// The underlying byte storage
+        /// </summary>
+        Data: byte[]
         
         /// <summary>
-        /// Writes a single byte to the buffer and advances the position
+        /// Current write position
         /// </summary>
-        /// <param name="value">The byte to write</param>
-        member this.Write(value: byte): unit =
-            this.Data.[toInt this.Position] <- value
-            this.Position <- addMeasured this.Position (ofInt<offset> 1)
-            
+        mutable Position: int
+    }
+
+    // ============================================================================
+    // MEMORY OPERATIONS (Firefly only)
+    // ============================================================================
+
+    /// <summary>
+    /// Operations on Memory - pure module functions.
+    /// </summary>
+    /// <remarks>
+    /// These operations are Firefly-only. They work with the capability-based
+    /// Memory type that provides compile-time region and lifetime safety.
+    /// </remarks>
+    module Memory =
         /// <summary>
-        /// Writes multiple bytes to the buffer and advances the position
+        /// Creates a memory view from a byte array.
         /// </summary>
-        /// <param name="values">The bytes to write</param>
-        member this.WriteBytes(values: byte[]): unit =
-            for i = 0 to values.Length - 1 do
-                this.Data.[toInt this.Position + i] <- values.[i]
-            this.Position <- addMeasured this.Position (ofInt<offset> values.Length)
-            
+        let fromArray<'T, [<Measure>] 'region> (data: byte[]) : Memory<'T, 'region> =
+            { Data = data
+              Offset = 0<offset>
+              Length = LanguagePrimitives.Int32WithMeasure<bytes> data.Length }
+        
         /// <summary>
-        /// Creates a new buffer with the specified capacity
+        /// Creates a zero-filled memory region.
         /// </summary>
-        /// <param name="capacity">The buffer capacity in bytes</param>
-        /// <returns>A new buffer instance</returns>
-        static member Create(capacity: int): Buffer<'T> =
-            { Data = Array.zeroCreate capacity
-              Position = ofInt<offset> 0 }
-    
+        let createZeroed<'T, [<Measure>] 'region> (size: int<bytes>) : Memory<'T, 'region> =
+            fromArray<'T, 'region> (Array.zeroCreate (int size))
+        
+        /// <summary>
+        /// Creates a slice of an existing memory region.
+        /// No copy - just a narrower view.
+        /// </summary>
+        let slice<'T, 'U, [<Measure>] 'region> 
+                 (mem: Memory<'T, 'region>) 
+                 (off: int<offset>) 
+                 (len: int<bytes>) 
+                 : Memory<'U, 'region> =
+            let newOffset = int mem.Offset + int off
+            if newOffset < 0 || int len < 0 || newOffset + int len > mem.Data.Length then
+                failwith "Slice out of bounds"
+            { Data = mem.Data
+              Offset = LanguagePrimitives.Int32WithMeasure<offset> newOffset
+              Length = len }
+        
+        /// <summary>
+        /// Copies data between memory regions.
+        /// </summary>
+        let copy<'T, 'U, [<Measure>] 'region1, [<Measure>] 'region2>
+                (src: Memory<'T, 'region1>)
+                (dst: Memory<'U, 'region2>)
+                (count: int<bytes>) : unit =
+            let srcOff = int src.Offset
+            let dstOff = int dst.Offset
+            let cnt = int count
+            if srcOff + cnt > src.Data.Length || dstOff + cnt > dst.Data.Length then
+                failwith "Copy out of bounds"
+            Array.blit src.Data srcOff dst.Data dstOff cnt
+
+    // ============================================================================
+    // BUFFER OPERATIONS (Dual-target: Firefly + Fable)
+    // ============================================================================
+
     /// <summary>
-    /// Creates a memory region from a byte array
+    /// Operations on Buffer - pure module functions.
     /// </summary>
-    /// <param name="data">The source byte array</param>
-    /// <returns>A new memory region containing the entire array</returns>
-    let fromArray<'T, [<Measure>] 'region> (data: byte[]) : Memory<'T, 'region> =
-        { Data = data
-          Offset = ofInt<offset> 0
-          Length = ofInt<bytes> data.Length }
-          
+    /// <remarks>
+    /// These operations are available in both Firefly and Fable targets.
+    /// Used by the Encoding module for BAREWire serialization.
+    /// </remarks>
+    module Buffer =
+        /// <summary>
+        /// Creates a buffer with specified capacity.
+        /// </summary>
+        let create (capacity: int) : Buffer =
+            { Data = Array.zeroCreate capacity; Position = 0 }
+        
+        /// <summary>
+        /// Writes a single byte to the buffer.
+        /// </summary>
+        let writeByte (buf: Buffer byref) (b: byte) : unit =
+            if buf.Position >= buf.Data.Length then
+                failwith "Buffer overflow"
+            buf.Data.[buf.Position] <- b
+            buf.Position <- buf.Position + 1
+        
+        /// <summary>
+        /// Writes a span of bytes to the buffer.
+        /// </summary>
+        let writeBytes (buf: Buffer byref) (bytes: byte[]) : unit =
+            let len = bytes.Length
+            if buf.Position + len > buf.Data.Length then
+                failwith "Buffer overflow"
+            Array.blit bytes 0 buf.Data buf.Position len
+            buf.Position <- buf.Position + len
+        
+        /// <summary>
+        /// Gets the written portion of a buffer as a byte array.
+        /// </summary>
+        let toArray (buf: Buffer) : byte[] =
+            buf.Data.[0 .. buf.Position - 1]
+        
+        /// <summary>
+        /// Resets the buffer position to the beginning.
+        /// </summary>
+        let reset (buf: Buffer byref) : unit =
+            buf.Position <- 0
+
+#if !FABLE
+    // ============================================================================
+    // NATIVE POINTER OPERATIONS (Firefly only)
+    // ============================================================================
+
     /// <summary>
-    /// Creates a memory region from a slice of an existing byte array
+    /// Creates a memory view from a native pointer.
+    /// For Firefly native compilation only.
     /// </summary>
-    /// <param name="data">The source byte array</param>
-    /// <param name="offset">The starting offset in the array</param>
-    /// <param name="length">The number of bytes to include</param>
-    /// <returns>A new memory region representing the specified slice</returns>
-    let fromArraySlice<'T, [<Measure>] 'region> (data: byte[]) (offset: int) (length: int) : Memory<'T, 'region> =
-        { Data = data
-          Offset = ofInt<offset> offset
-          Length = ofInt<bytes> length }
-    
-    /// <summary>
-    /// Copies data from one memory region to another
-    /// </summary>
-    /// <param name="source">The source memory region</param>
-    /// <param name="destination">The destination memory region</param>
-    /// <param name="count">The number of bytes to copy</param>
-    /// <exception cref="System.Exception">Thrown when copy exceeds memory region bounds</exception>
-    let copy<'T, 'U, [<Measure>] 'region1, [<Measure>] 'region2> 
-            (source: Memory<'T, 'region1>) 
-            (destination: Memory<'U, 'region2>) 
-            (count: int<bytes>) : unit =
-        
-        if greaterThanMeasured count source.Length || greaterThanMeasured count destination.Length then
-            failwith "Copy exceeds memory region bounds"
-            
-        let srcOffset = toInt source.Offset
-        let dstOffset = toInt destination.Offset
-        let copyCount = toInt count
-        
-        // Manual copy implementation without System dependencies
-        for i = 0 to copyCount - 1 do
-            destination.Data.[dstOffset + i] <- source.Data.[srcOffset + i]
-    
-    /// <summary>
-    /// Creates a slice of a memory region
-    /// </summary>
-    /// <param name="memory">The source memory region</param>
-    /// <param name="offset">The starting offset within the region</param>
-    /// <param name="length">The number of bytes to include in the slice</param>
-    /// <returns>A new memory region representing the specified slice</returns>
-    /// <exception cref="System.Exception">Thrown when slice exceeds memory region bounds</exception>
-    let slice<'T, 'U, [<Measure>] 'region> 
-             (memory: Memory<'T, 'region>) 
-             (offset: int<offset>) 
-             (length: int<bytes>) : Memory<'U, 'region> =
-             
-        // Convert to raw ints for normal comparisons and calculations
-        let rawOffset = toInt offset
-        let rawLength = toInt length
-        let memoryOffset = toInt memory.Offset
-        let memoryLength = toInt memory.Length
-         
-        if rawOffset < 0 || rawLength < 0 || 
-           rawOffset + rawLength > memoryLength then
-            failwith "Slice exceeds memory region bounds"
-            
-        { Data = memory.Data
-          Offset = addMeasured memory.Offset offset
-          Length = length }
-    
-    /// <summary>
-    /// Reads a byte from memory at the specified offset
-    /// </summary>
-    /// <param name="memory">The memory region to read from</param>
-    /// <param name="offset">The offset within the region</param>
-    /// <returns>The byte value at the specified offset</returns>
-    /// <exception cref="System.Exception">Thrown when offset is out of bounds</exception>
-    let readByte<'T, [<Measure>] 'region> 
-                (memory: Memory<'T, 'region>) 
-                (offset: int<offset>) : byte =
-        
-        let rawOffset = toInt offset
-        let memoryOffset = toInt memory.Offset
-        let memoryLength = toInt memory.Length
-                
-        if rawOffset < 0 || rawOffset >= memoryLength then
-            failwith "Offset out of bounds"
-            
-        memory.Data.[memoryOffset + rawOffset]
-    
-    /// <summary>
-    /// Writes a byte to memory at the specified offset
-    /// </summary>
-    /// <param name="memory">The memory region to write to</param>
-    /// <param name="offset">The offset within the region</param>
-    /// <param name="value">The byte value to write</param>
-    /// <exception cref="System.Exception">Thrown when offset is out of bounds</exception>
-    let writeByte<'T, [<Measure>] 'region> 
-                 (memory: Memory<'T, 'region>) 
-                 (offset: int<offset>) 
-                 (value: byte) : unit =
-        
-        let rawOffset = toInt offset
-        let memoryOffset = toInt memory.Offset
-        let memoryLength = toInt memory.Length
-                 
-        if rawOffset < 0 || rawOffset >= memoryLength then
-            failwith "Offset out of bounds"
-            
-        memory.Data.[memoryOffset + rawOffset] <- value
-    
-    /// <summary>
-    /// Gets the absolute address of a location within a region
-    /// </summary>
-    /// <param name="memory">The memory region</param>
-    /// <param name="relativeOffset">The relative offset within the region</param>
-    /// <returns>An address representing the absolute location</returns>
-    /// <exception cref="System.Exception">Thrown when address is outside region bounds</exception>
-    let getAddress<'T, [<Measure>] 'region> 
-                  (memory: Memory<'T, 'region>) 
-                  (relativeOffset: int<offset>) : Address<'region> =
-        
-        let rawOffset = toInt relativeOffset
-        let memoryLength = toInt memory.Length
-                  
-        if rawOffset >= memoryLength then
-            failwith "Address outside region bounds"
-            
-        { Offset = addMeasured memory.Offset relativeOffset }
-        
-    /// <summary>
-    /// Fills a memory region with a specific byte value
-    /// </summary>
-    /// <param name="memory">The memory region to fill</param>
-    /// <param name="value">The byte value to fill with</param>
-    let fill<'T, [<Measure>] 'region>
-                (memory: Memory<'T, 'region>)
-                (value: byte) : unit =
-        
-        let memoryOffset = toInt memory.Offset
-        let memoryLength = toInt memory.Length
-        
-        for i = 0 to memoryLength - 1 do
-            memory.Data.[memoryOffset + i] <- value
-        
-    /// <summary>
-    /// Clears a memory region (fills with zeros)
-    /// </summary>
-    /// <param name="memory">The memory region to clear</param>
-    let clear<'T, [<Measure>] 'region>
-                 (memory: Memory<'T, 'region>) : unit =
-        fill memory 0uy
-        
-    /// <summary>
-    /// Compares two memory regions for equality
-    /// </summary>
-    /// <param name="memory1">The first memory region</param>
-    /// <param name="memory2">The second memory region</param>
-    /// <returns>True if the regions contain the same bytes, false otherwise</returns>
-    let equals<'T, 'U, [<Measure>] 'region1, [<Measure>] 'region2>
-                  (memory1: Memory<'T, 'region1>)
-                  (memory2: Memory<'U, 'region2>) : bool =
-        
-        let memory1Offset = toInt memory1.Offset
-        let memory1Length = toInt memory1.Length
-        let memory2Offset = toInt memory2.Offset
-        let memory2Length = toInt memory2.Length
-        
-        if memory1Length <> memory2Length then false
-        else
-            let mutable result = true
-            let mutable i = 0
-            
-            while result && i < memory1Length do
-                if memory1.Data.[memory1Offset + i] <> memory2.Data.[memory2Offset + i] then
-                    result <- false
-                i <- i + 1
-                
-            result
-            
-    /// <summary>
-    /// Creates a memory region from a native pointer
-    /// </summary>
-    /// <param name="ptr">The native pointer</param>
-    /// <param name="size">The size in bytes</param>
-    /// <returns>A view over the native memory</returns>
-    let fromNativePointer<'T, [<Measure>] 'region> (ptr: nativeint) (size: int) : Memory<'T, 'region> =
-        // This is a placeholder that would typically use a platform-specific API
-        // In a real implementation, we would create a memory-mapped view of the native memory
-        // For this example, we'll just create a byte array and copy the data
-        let data = Array.zeroCreate size
-        // Here we would typically copy memory from the native pointer
-        // For now, just return an empty array
-        { Data = data; Offset = ofInt<offset> 0; Length = ofInt<bytes> size }
+    let inline fromNativePointer<'T, [<Measure>] 'region> (ptr: nativeint) (size: int<bytes>) : Memory<'T, 'region> =
+        // In Firefly, this creates a capability-backed memory view
+        // The actual implementation is provided by FNCS NativePtr intrinsics
+        { Data = Array.zeroCreate (int size)  // Placeholder - Firefly provides native backing
+          Offset = 0<offset>
+          Length = size }
+#endif

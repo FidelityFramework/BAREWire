@@ -25,7 +25,7 @@ module Analysis =
     /// <param name="schema">The schema definition</param>
     /// <param name="typ">The type to analyze</param>
     /// <returns>Size information including minimum, maximum, and fixed-size status</returns>
-    /// <exception cref="System.Exception">Thrown when a type is not found in the schema</exception>
+    /// <remarks>Throws when a type is not found in the schema</remarks>
     let rec getTypeSize (schema: SchemaDefinition<validated>) (typ: Type): Size =
         match typ with
         | Primitive primType ->
@@ -124,7 +124,7 @@ module Analysis =
     /// <param name="schema">The schema definition</param>
     /// <param name="typ">The type to analyze</param>
     /// <returns>Alignment information for the type</returns>
-    /// <exception cref="System.Exception">Thrown when a type is not found in the schema</exception>
+    /// <remarks>Throws when a type is not found in the schema</remarks>
     let rec getTypeAlignment (schema: SchemaDefinition<validated>) (typ: Type): Alignment =
         match typ with
         | Primitive primType ->

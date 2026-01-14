@@ -1,9 +1,8 @@
 namespace BAREWire.Core
 
-open Alloy
-
 /// <summary>
-/// Error types used throughout BAREWire, integrated with Alloy's Result handling
+/// Error types used throughout BAREWire.
+/// Uses standard F# Result type - no external dependencies.
 /// </summary>
 module Error =
     /// <summary>
@@ -139,8 +138,10 @@ module Error =
     /// <param name="option">The option to convert</param>
     /// <returns>A Result containing the option value or the error</returns>
     let inline ofOption error option =
-        Result.ofOption error option
-        
+        match option with
+        | Some value -> Ok value
+        | None -> Error error
+
     /// <summary>
     /// Converts a ValueOption to a Result, using the provided error if None
     /// </summary>
@@ -148,24 +149,30 @@ module Error =
     /// <param name="option">The ValueOption to convert</param>
     /// <returns>A Result containing the option value or the error</returns>
     let inline ofValueOption error option =
-        Result.ofValueOption error option
-        
+        match option with
+        | ValueSome value -> Ok value
+        | ValueNone -> Error error
+
     /// <summary>
     /// Converts a Result to an option, discarding the error
     /// </summary>
     /// <param name="result">The result to convert</param>
     /// <returns>Some value if Ok, None if Error</returns>
     let inline toOption result =
-        Result.toOption result
-        
+        match result with
+        | Ok value -> Some value
+        | Error _ -> None
+
     /// <summary>
     /// Converts a Result to a ValueOption, discarding the error
     /// </summary>
     /// <param name="result">The result to convert</param>
     /// <returns>Some value if Ok, None if Error</returns>
     let inline toValueOption result =
-        Result.toValueOption result
-        
+        match result with
+        | Ok value -> ValueSome value
+        | Error _ -> ValueNone
+
     /// <summary>
     /// Applies a function to both the value and error paths of a result
     /// </summary>
@@ -174,8 +181,10 @@ module Error =
     /// <param name="result">The result to transform</param>
     /// <returns>A new result with transformed value and error</returns>
     let inline bimap mapFunc errorMapFunc result =
-        Result.bimap mapFunc errorMapFunc result
-        
+        match result with
+        | Ok value -> Ok (mapFunc value)
+        | Error err -> Error (errorMapFunc err)
+
     /// <summary>
     /// Filters a successful result with a predicate, returning error if predicate fails
     /// </summary>
@@ -184,7 +193,10 @@ module Error =
     /// <param name="result">The result to filter</param>
     /// <returns>The original result if Ok and predicate passes, otherwise Error</returns>
     let inline filter predicate error result =
-        Result.filter predicate error result
+        match result with
+        | Ok value when predicate value -> Ok value
+        | Ok _ -> Error error
+        | Error e -> Error e
         
     /// <summary>
     /// Converts a validation result to an Error.Result

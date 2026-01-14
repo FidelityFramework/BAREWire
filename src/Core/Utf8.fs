@@ -1,9 +1,8 @@
 namespace BAREWire.Core
 
-open Alloy
-
 /// <summary>
-/// Pure F# UTF-8 encoding/decoding implementation
+/// Pure F# UTF-8 encoding/decoding implementation.
+/// No external dependencies.
 /// </summary>
 module Utf8 =
     /// <summary>

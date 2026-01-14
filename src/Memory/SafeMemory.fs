@@ -123,7 +123,7 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>The byte value read from memory</returns>
-    /// <exception cref="System.Exception">Thrown when the offset is out of bounds</exception>
+    /// <remarks>Throws when the offset is out of bounds</remarks>
     let readByte (data: byte[]) (offset: int) : byte =
         if offset < 0 || offset >= data.Length then
             failwith "Offset out of bounds"
@@ -136,7 +136,7 @@ module SafeMemory =
     /// <param name="data">The memory to write to</param>
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The byte value to write</param>
-    /// <exception cref="System.Exception">Thrown when the offset is out of bounds</exception>
+    /// <remarks>Throws when the offset is out of bounds</remarks>
     let writeByte (data: byte[]) (offset: int) (value: byte) : unit =
         if offset < 0 || offset >= data.Length then
             failwith "Offset out of bounds"
@@ -151,7 +151,7 @@ module SafeMemory =
     /// <param name="dest">The destination array</param>
     /// <param name="destOffset">The offset within the destination array</param>
     /// <param name="count">The number of bytes to copy</param>
-    /// <exception cref="System.Exception">Thrown when the copy would exceed array bounds</exception>
+    /// <remarks>Throws when the copy would exceed array bounds</remarks>
     let copyMemory (source: byte[]) (sourceOffset: int) (dest: byte[]) (destOffset: int) (count: int) : unit =
         if sourceOffset < 0 || sourceOffset + count > source.Length ||
            destOffset < 0 || destOffset + count > dest.Length then

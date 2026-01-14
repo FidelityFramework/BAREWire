@@ -455,7 +455,7 @@ module View =
                                 | Some fo -> getTypeName fo.Type
                                 | None -> ""
                             
-                            if not (System.String.IsNullOrEmpty nestedTypeName) then
+                            if nestedTypeName <> "" then
                                 result <- calcOffsets nestedTypeName newPath alignedOffset result
                         | UserDefined nestedTypeName ->
                             let newPath = parentPath @ [field.Name]

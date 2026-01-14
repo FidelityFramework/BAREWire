@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <!-- Core -->
+    <Compile Include="Core/Capability.fs" />
     <Compile Include="Core/Types.fs" />
     <Compile Include="Core/Memory.fs" />
     <Compile Include="Core/Error.fs" />

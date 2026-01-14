@@ -81,7 +81,7 @@ module Region =
         try
             let newData = Array.zeroCreate (int newSize)
             let copySize = min region.Length newSize
-            System.Array.Copy(region.Data, int region.Offset, newData, 0, int copySize)
+            Array.blit region.Data (int region.Offset) newData 0 (int copySize)
             Ok (fromArray<'T, 'region> newData)
         with ex ->
             Error (invalidValueError $"Failed to resize region: {ex.Message}")
@@ -116,8 +116,8 @@ module Region =
             let newSize = region1.Length + region2.Length
             let newData = Array.zeroCreate (int newSize)
             
-            System.Array.Copy(region1.Data, int region1.Offset, newData, 0, int region1.Length)
-            System.Array.Copy(region2.Data, int region2.Offset, newData, int region1.Length, int region2.Length)
+            Array.blit region1.Data (int region1.Offset) newData 0 (int region1.Length)
+            Array.blit region2.Data (int region2.Offset) newData (int region1.Length) (int region2.Length)
             
             Ok (fromArray<'T, 'region> newData)
         with ex ->

@@ -1,0 +1,29 @@
+[package]
+name = "BAREWire"
+version = "0.1.0"
+authors = ["Houston Haynes"]
+description = "Binary data encoding, memory mapping, and communication."
+
+[build]
+sources = [
+    "Core/Types.fs",
+    "Core/Memory.fs",
+    "Core/Error.fs",
+    "Core/Utf8.fs",
+    "Core/Binary.fs",
+    "Core/Uuid.fs",
+    "Core/Time.fs",
+    "Memory/SafeMemory.fs",
+    "Memory/Region.fs",
+    "Memory/View.fs",
+    "Memory/Mapping.fs",
+    "Encoding/Encoder.fs",
+    "Encoding/Decoder.fs",
+    "Encoding/Codec.fs",
+    "Schema/Definition.fs",
+    "Schema/Validation.fs",
+    "Schema/Analysis.fs",
+    "Schema/DSL.fs"
+]
+
+[dependencies]

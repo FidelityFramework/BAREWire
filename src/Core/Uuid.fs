@@ -1,9 +1,7 @@
 namespace BAREWire.Core
 
-open Alloy
-
 /// <summary>
-/// Pure F# UUID implementation (RFC 4122) with no System.Guid dependencies
+/// Pure F# UUID implementation (RFC 4122) - no BCL dependencies
 /// </summary>
 module Uuid =
     /// <summary>
@@ -34,7 +32,7 @@ module Uuid =
     /// </summary>
     /// <param name="c">The hex character</param>
     /// <returns>The numeric value (0-15)</returns>
-    /// <exception cref="System.Exception">Thrown when the character is not a valid hex digit</exception>
+    /// <remarks>Throws when the character is not a valid hex digit</remarks>
     let private hexToInt (c: char): int =
         match c with
         | c when c >= '0' && c <= '9' -> int c - int '0'
@@ -75,7 +73,7 @@ module Uuid =
     /// <param name="namespace">The namespace UUID</param>
     /// <param name="name">The name string</param>
     /// <returns>A version 5 UUID</returns>
-    let newUuidV5 (``namespace``: Uuid) (name: string) Uuid =
+    let newUuidV5 (``namespace``: Uuid) (name: string): Uuid =
         // Convert name to bytes using UTF-8 encoding
         let nameBytes = 
             Array.init name.Length (fun i -> 
@@ -159,7 +157,7 @@ module Uuid =
     /// </summary>
     /// <param name="s">The string to parse</param>
     /// <returns>The parsed UUID</returns>
-    /// <exception cref="System.Exception">Thrown when the string is not a valid UUID</exception>
+    /// <remarks>Throws when the string is not a valid UUID</remarks>
     let fromString (s: string): Uuid =
         if s.Length <> 36 then
             failwith $"Invalid UUID format: expected 36 characters, got {s.Length}"
@@ -228,7 +226,7 @@ module Uuid =
     /// </summary>
     /// <param name="bytes">The byte array (must be 16 bytes)</param>
     /// <returns>A UUID created from the byte array</returns>
-    /// <exception cref="System.Exception">Thrown when the byte array is not 16 bytes</exception>
+    /// <remarks>Throws when the byte array is not 16 bytes</remarks>
     let fromByteArray (bytes: byte[]): Uuid =
         if bytes.Length <> 16 then
             failwith $"UUID byte array must be exactly 16 bytes, got {bytes.Length}"
