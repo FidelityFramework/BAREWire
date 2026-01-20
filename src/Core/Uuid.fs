@@ -38,7 +38,7 @@ module Uuid =
         | c when c >= '0' && c <= '9' -> int c - int '0'
         | c when c >= 'a' && c <= 'f' -> int c - int 'a' + 10
         | c when c >= 'A' && c <= 'F' -> int c - int 'A' + 10
-        | _ -> failwith $"Invalid hex character: {c}"
+        | _ -> failwith ("Invalid hex character: " + string c)
     
     /// <summary>
     /// The nil UUID (all zeros)
@@ -80,8 +80,13 @@ module Uuid =
                 let c = int name.[i]
                 if c < 128 then byte c else byte '?')
         
-        // Combine namespace and name
-        let data = Array.append ``namespace``.Data nameBytes
+        // Combine namespace and name (manual append since Array.append not available)
+        let nsData = ``namespace``.Data
+        let data = Array.zeroCreate (nsData.Length + nameBytes.Length)
+        for i = 0 to nsData.Length - 1 do
+            data.[i] <- nsData.[i]
+        for i = 0 to nameBytes.Length - 1 do
+            data.[nsData.Length + i] <- nameBytes.[i]
         
         // Normally we would compute SHA-1 hash here
         // For this example, we'll just do a simple hash
@@ -160,7 +165,7 @@ module Uuid =
     /// <remarks>Throws when the string is not a valid UUID</remarks>
     let fromString (s: string): Uuid =
         if s.Length <> 36 then
-            failwith $"Invalid UUID format: expected 36 characters, got {s.Length}"
+            failwith ("Invalid UUID format: expected 36 characters, got " + string s.Length)
         
         // Check hyphens are in the right places
         if s.[8] <> '-' || s.[13] <> '-' || s.[18] <> '-' || s.[23] <> '-' then
@@ -229,7 +234,7 @@ module Uuid =
     /// <remarks>Throws when the byte array is not 16 bytes</remarks>
     let fromByteArray (bytes: byte[]): Uuid =
         if bytes.Length <> 16 then
-            failwith $"UUID byte array must be exactly 16 bytes, got {bytes.Length}"
+            failwith ("UUID byte array must be exactly 16 bytes, got " + string bytes.Length)
             
         { Data = Array.copy bytes }
     

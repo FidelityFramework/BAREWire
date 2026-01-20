@@ -10,7 +10,7 @@ open BAREWire.Core.Error
 module Decoder =
 
     // Helper to compute actual byte index in Memory
-    let inline private memIndex (memory: Memory<'T>) (localOffset: int) : int =
+    let inline private memIndex (memory: Memory) (localOffset: int) : int =
         int memory.Offset + int localOffset
 
     /// <summary>
@@ -19,7 +19,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The decoded uint64 value and the new offset</returns>
-    let inline readUInt (memory: Memory<'T>) (offset: int): uint64 * int =
+    let inline readUInt (memory: Memory) (offset: int): uint64 * int =
         let mutable result = 0UL
         let mutable shift = 0
         let mutable currentOffset = offset
@@ -40,23 +40,24 @@ module Decoder =
     /// Reads a uint value using ULEB128 encoding from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The decoded uint64 value</returns>
-    let inline readUIntArray (bytes: byte[]) (offset: byref<int>): uint64 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The decoded uint64 value and the new offset</returns>
+    let inline readUIntArray (bytes: byte[]) (offset: int): uint64 * int =
         let mutable result = 0UL
         let mutable shift = 0
+        let mutable currentOffset = offset
         let mutable currentByte = 0uy
 
         let mutable shouldContinue = true
-        while shouldContinue && offset < bytes.Length do
-            currentByte <- bytes.[offset]
-            offset <- offset + 1
+        while shouldContinue && currentOffset < bytes.Length do
+            currentByte <- bytes.[currentOffset]
+            currentOffset <- currentOffset + 1
 
             result <- result ||| ((uint64 (currentByte &&& 0x7Fuy)) <<< shift)
             shift <- shift + 7
             shouldContinue <- (currentByte &&& 0x80uy <> 0uy) && (shift < 64)
 
-        result
+        result, currentOffset
 
     /// <summary>
     /// Reads an int value using zigzag ULEB128 encoding
@@ -64,24 +65,25 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The decoded int64 value and the new offset</returns>
-    let inline readInt (memory: Memory<'T>) (offset: int): int64 * int =
-        let uintVal, newOffset = readUInt memory offset
-
-        // Zigzag decoding: (n >>> 1) ^ -(n &&& 1)
-        let value = (int64 uintVal >>> 1) ^^^ (-(int64 (uintVal &&& 1UL)))
-        value, newOffset
+    let inline readInt (memory: Memory) (offset: int): int64 * int =
+        match readUInt memory offset with
+        | (uintVal, newOffset) ->
+            // Zigzag decoding: (n >>> 1) ^ -(n &&& 1)
+            let value = (int64 uintVal >>> 1) ^^^ (-(int64 (uintVal &&& 1UL)))
+            value, newOffset
 
     /// <summary>
     /// Reads an int value using zigzag ULEB128 encoding from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The decoded int64 value</returns>
-    let inline readIntArray (bytes: byte[]) (offset: byref<int>): int64 =
-        let uintVal = readUIntArray bytes &offset
-
-        // Zigzag decoding: (n >>> 1) ^ -(n &&& 1)
-        (int64 uintVal >>> 1) ^^^ (-(int64 (uintVal &&& 1UL)))
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The decoded int64 value and the new offset</returns>
+    let inline readIntArray (bytes: byte[]) (offset: int): int64 * int =
+        match readUIntArray bytes offset with
+        | (uintVal, newOffset) ->
+            // Zigzag decoding: (n >>> 1) ^ -(n &&& 1)
+            let value = (int64 uintVal >>> 1) ^^^ (-(int64 (uintVal &&& 1UL)))
+            value, newOffset
 
     /// <summary>
     /// Reads a u8 (byte) value
@@ -89,7 +91,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The offset to read at</param>
     /// <returns>The byte value and the new offset</returns>
-    let inline readU8 (memory: Memory<'T>) (offset: int): byte * int =
+    let inline readU8 (memory: Memory) (offset: int): byte * int =
         let value = memory.Data.[memIndex memory offset]
         value, offset + 1
 
@@ -97,12 +99,11 @@ module Decoder =
     /// Reads a u8 (byte) value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The byte value</returns>
-    let inline readU8Array (bytes: byte[]) (offset: byref<int>): byte =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The byte value and the new offset</returns>
+    let inline readU8Array (bytes: byte[]) (offset: int): byte * int =
         let value = bytes.[offset]
-        offset <- offset + 1
-        value
+        value, offset + 1
 
     /// <summary>
     /// Reads a u16 value in little-endian format
@@ -110,7 +111,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint16 value and the new offset</returns>
-    let inline readU16 (memory: Memory<'T>) (offset: int): uint16 * int =
+    let inline readU16 (memory: Memory) (offset: int): uint16 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt16 memory.Data idx
         value, offset + 2
@@ -119,12 +120,11 @@ module Decoder =
     /// Reads a u16 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The uint16 value</returns>
-    let inline readU16Array (bytes: byte[]) (offset: byref<int>): uint16 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The uint16 value and the new offset</returns>
+    let inline readU16Array (bytes: byte[]) (offset: int): uint16 * int =
         let value = Binary.toUInt16 bytes offset
-        offset <- offset + 2
-        value
+        value, offset + 2
 
     /// <summary>
     /// Reads a u32 value in little-endian format
@@ -132,7 +132,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint32 value and the new offset</returns>
-    let inline readU32 (memory: Memory<'T>) (offset: int): uint32 * int =
+    let inline readU32 (memory: Memory) (offset: int): uint32 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt32 memory.Data idx
         value, offset + 4
@@ -141,12 +141,11 @@ module Decoder =
     /// Reads a u32 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The uint32 value</returns>
-    let inline readU32Array (bytes: byte[]) (offset: byref<int>): uint32 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The uint32 value and the new offset</returns>
+    let inline readU32Array (bytes: byte[]) (offset: int): uint32 * int =
         let value = Binary.toUInt32 bytes offset
-        offset <- offset + 4
-        value
+        value, offset + 4
 
     /// <summary>
     /// Reads a u64 value in little-endian format
@@ -154,7 +153,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint64 value and the new offset</returns>
-    let inline readU64 (memory: Memory<'T>) (offset: int): uint64 * int =
+    let inline readU64 (memory: Memory) (offset: int): uint64 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt64 memory.Data idx
         value, offset + 8
@@ -163,12 +162,11 @@ module Decoder =
     /// Reads a u64 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The uint64 value</returns>
-    let inline readU64Array (bytes: byte[]) (offset: byref<int>): uint64 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The uint64 value and the new offset</returns>
+    let inline readU64Array (bytes: byte[]) (offset: int): uint64 * int =
         let value = Binary.toUInt64 bytes offset
-        offset <- offset + 8
-        value
+        value, offset + 8
 
     /// <summary>
     /// Reads an i8 (sbyte) value
@@ -176,7 +174,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The offset to read at</param>
     /// <returns>The sbyte value and the new offset</returns>
-    let inline readI8 (memory: Memory<'T>) (offset: int): sbyte * int =
+    let inline readI8 (memory: Memory) (offset: int): sbyte * int =
         let value = sbyte memory.Data.[memIndex memory offset]
         value, offset + 1
 
@@ -184,12 +182,11 @@ module Decoder =
     /// Reads an i8 (sbyte) value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The sbyte value</returns>
-    let inline readI8Array (bytes: byte[]) (offset: byref<int>): sbyte =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The sbyte value and the new offset</returns>
+    let inline readI8Array (bytes: byte[]) (offset: int): sbyte * int =
         let value = sbyte bytes.[offset]
-        offset <- offset + 1
-        value
+        value, offset + 1
 
     /// <summary>
     /// Reads an i16 value in little-endian format
@@ -197,7 +194,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int16 value and the new offset</returns>
-    let inline readI16 (memory: Memory<'T>) (offset: int): int16 * int =
+    let inline readI16 (memory: Memory) (offset: int): int16 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt16 memory.Data idx
         value, offset + 2
@@ -206,12 +203,11 @@ module Decoder =
     /// Reads an i16 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The int16 value</returns>
-    let inline readI16Array (bytes: byte[]) (offset: byref<int>): int16 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The int16 value and the new offset</returns>
+    let inline readI16Array (bytes: byte[]) (offset: int): int16 * int =
         let value = Binary.toInt16 bytes offset
-        offset <- offset + 2
-        value
+        value, offset + 2
 
     /// <summary>
     /// Reads an i32 value in little-endian format
@@ -219,7 +215,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int32 value and the new offset</returns>
-    let inline readI32 (memory: Memory<'T>) (offset: int): int32 * int =
+    let inline readI32 (memory: Memory) (offset: int): int32 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt32 memory.Data idx
         value, offset + 4
@@ -228,12 +224,11 @@ module Decoder =
     /// Reads an i32 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The int32 value</returns>
-    let inline readI32Array (bytes: byte[]) (offset: byref<int>): int32 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The int32 value and the new offset</returns>
+    let inline readI32Array (bytes: byte[]) (offset: int): int32 * int =
         let value = Binary.toInt32 bytes offset
-        offset <- offset + 4
-        value
+        value, offset + 4
 
     /// <summary>
     /// Reads an i64 value in little-endian format
@@ -241,7 +236,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int64 value and the new offset</returns>
-    let inline readI64 (memory: Memory<'T>) (offset: int): int64 * int =
+    let inline readI64 (memory: Memory) (offset: int): int64 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt64 memory.Data idx
         value, offset + 8
@@ -250,12 +245,11 @@ module Decoder =
     /// Reads an i64 value in little-endian format from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The int64 value</returns>
-    let inline readI64Array (bytes: byte[]) (offset: byref<int>): int64 =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The int64 value and the new offset</returns>
+    let inline readI64Array (bytes: byte[]) (offset: int): int64 * int =
         let value = Binary.toInt64 bytes offset
-        offset <- offset + 8
-        value
+        value, offset + 8
 
     /// <summary>
     /// Reads an f32 (float32) value
@@ -263,20 +257,21 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The float32 value and the new offset</returns>
-    let inline readF32 (memory: Memory<'T>) (offset: int): float32 * int =
-        let bits, newOffset = readI32 memory offset
-        let value = Binary.int32BitsToSingle bits
-        value, newOffset
+    let inline readF32 (memory: Memory) (offset: int): float32 * int =
+        match readI32 memory offset with
+        | (bits, newOffset) ->
+            let value = Binary.int32BitsToSingle bits
+            value, newOffset
 
     /// <summary>
     /// Reads an f32 (float32) value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The float32 value</returns>
-    let inline readF32Array (bytes: byte[]) (offset: byref<int>): float32 =
-        let bits = readI32Array bytes &offset
-        Binary.int32BitsToSingle bits
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The float32 value and the new offset</returns>
+    let inline readF32Array (bytes: byte[]) (offset: int): float32 * int =
+        match readI32Array bytes offset with
+        | (bits, newOffset) -> Binary.int32BitsToSingle bits, newOffset
 
     /// <summary>
     /// Reads an f64 (double) value
@@ -284,20 +279,21 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The double value and the new offset</returns>
-    let inline readF64 (memory: Memory<'T>) (offset: int): float * int =
-        let bits, newOffset = readI64 memory offset
-        let value = Binary.int64BitsToDouble bits
-        value, newOffset
+    let inline readF64 (memory: Memory) (offset: int): float * int =
+        match readI64 memory offset with
+        | (bits, newOffset) ->
+            let value = Binary.int64BitsToDouble bits
+            value, newOffset
 
     /// <summary>
     /// Reads an f64 (double) value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The double value</returns>
-    let inline readF64Array (bytes: byte[]) (offset: byref<int>): float =
-        let bits = readI64Array bytes &offset
-        Binary.int64BitsToDouble bits
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The double value and the new offset</returns>
+    let inline readF64Array (bytes: byte[]) (offset: int): float * int =
+        match readI64Array bytes offset with
+        | (bits, newOffset) -> Binary.int64BitsToDouble bits, newOffset
 
     /// <summary>
     /// Reads a boolean value
@@ -306,27 +302,26 @@ module Decoder =
     /// <param name="offset">The offset to read at</param>
     /// <returns>The boolean value and the new offset</returns>
     /// <remarks>Throws when the byte is not 0 or 1</remarks>
-    let inline readBool (memory: Memory<'T>) (offset: int): bool * int =
+    let inline readBool (memory: Memory) (offset: int): bool * int =
         let b = memory.Data.[memIndex memory offset]
         match b with
         | 0uy -> false, offset + 1
         | 1uy -> true, offset + 1
-        | _ -> failwith $"Invalid boolean value: {b}"
+        | _ -> failwith ("Invalid boolean value: " + string b)
 
     /// <summary>
     /// Reads a boolean value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The boolean value</returns>
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The boolean value and the new offset</returns>
     /// <remarks>Throws when the byte is not 0 or 1</remarks>
-    let inline readBoolArray (bytes: byte[]) (offset: byref<int>): bool =
+    let inline readBoolArray (bytes: byte[]) (offset: int): bool * int =
         let b = bytes.[offset]
-        offset <- offset + 1
         match b with
-        | 0uy -> false
-        | 1uy -> true
-        | _ -> failwith $"Invalid boolean value: {b}"
+        | 0uy -> false, offset + 1
+        | 1uy -> true, offset + 1
+        | _ -> failwith ("Invalid boolean value: " + string b)
 
     /// <summary>
     /// Reads a string value
@@ -334,36 +329,42 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The string value and the new offset</returns>
-    let inline readString (memory: Memory<'T>) (offset: int): string * int =
+    let inline readString (memory: Memory) (offset: int): string * int =
         // Read length
-        let length, currentOffset = readUInt memory offset
-        if length = 0UL then
-            "", currentOffset
-        else
-            // Extract bytes and decode
-            let startIdx = memIndex memory currentOffset
-            let strBytes = memory.Data.[startIdx .. startIdx + int length - 1]
-            let str = Utf8.getString strBytes
-
-            str, currentOffset + (int length * 1)
+        match readUInt memory offset with
+        | (length, currentOffset) ->
+            if length = 0UL then
+                "", currentOffset
+            else
+                // Extract bytes and decode (manual copy since slicing not supported)
+                let startIdx = memIndex memory currentOffset
+                let len = int length
+                let strBytes = Array.zeroCreate len
+                for i = 0 to len - 1 do
+                    strBytes.[i] <- memory.Data.[startIdx + i]
+                let str = Utf8.getString strBytes
+                str, currentOffset + len
 
     /// <summary>
     /// Reads a string value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The string value</returns>
-    let inline readStringArray (bytes: byte[]) (offset: byref<int>): string =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The string value and the new offset</returns>
+    let inline readStringArray (bytes: byte[]) (offset: int): string * int =
         // Read length
-        let length = int (readUIntArray bytes &offset)
-        if length = 0 then
-            ""
-        else
-            // Extract bytes and decode
-            let strBytes = bytes.[offset .. offset + length - 1]
-            let str = Utf8.getString strBytes
-            offset <- offset + length
-            str
+        match readUIntArray bytes offset with
+        | (lengthVal, currentOffset) ->
+            let length = int lengthVal
+            if length = 0 then
+                "", currentOffset
+            else
+                // Extract bytes and decode (manual copy since slicing not supported)
+                let strBytes = Array.zeroCreate length
+                for i = 0 to length - 1 do
+                    strBytes.[i] <- bytes.[currentOffset + i]
+                let str = Utf8.getString strBytes
+                str, currentOffset + length
 
     /// <summary>
     /// Reads a variable-length data value
@@ -371,34 +372,40 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The byte array and the new offset</returns>
-    let inline readData (memory: Memory<'T>) (offset: int): byte[] * int =
+    let inline readData (memory: Memory) (offset: int): byte[] * int =
         // Read length
-        let length, currentOffset = readUInt memory offset
-        if length = 0UL then
-            Array.empty, currentOffset
-        else
-            // Extract bytes
-            let startIdx = memIndex memory currentOffset
-            let result = memory.Data.[startIdx .. startIdx + int length - 1]
-
-            result, currentOffset + (int length * 1)
+        match readUInt memory offset with
+        | (length, currentOffset) ->
+            if length = 0UL then
+                Array.zeroCreate 0, currentOffset
+            else
+                // Extract bytes (manual copy since slicing not supported)
+                let startIdx = memIndex memory currentOffset
+                let len = int length
+                let result = Array.zeroCreate len
+                for i = 0 to len - 1 do
+                    result.[i] <- memory.Data.[startIdx + i]
+                result, currentOffset + len
 
     /// <summary>
     /// Reads a variable-length data value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <returns>The byte array</returns>
-    let inline readDataArray (bytes: byte[]) (offset: byref<int>): byte[] =
+    /// <param name="offset">The starting offset</param>
+    /// <returns>The byte array and the new offset</returns>
+    let inline readDataArray (bytes: byte[]) (offset: int): byte[] * int =
         // Read length
-        let length = int (readUIntArray bytes &offset)
-        if length = 0 then
-            Array.empty
-        else
-            // Extract bytes
-            let result = bytes.[offset .. offset + length - 1]
-            offset <- offset + length
-            result
+        match readUIntArray bytes offset with
+        | (lengthVal, currentOffset) ->
+            let length = int lengthVal
+            if length = 0 then
+                Array.zeroCreate 0, currentOffset
+            else
+                // Extract bytes (manual copy since slicing not supported)
+                let result = Array.zeroCreate length
+                for i = 0 to length - 1 do
+                    result.[i] <- bytes.[currentOffset + i]
+                result, currentOffset + length
 
     /// <summary>
     /// Reads fixed-length data
@@ -407,25 +414,27 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <param name="length">The length of data to read</param>
     /// <returns>The byte array and the new offset</returns>
-    let inline readFixedData (memory: Memory<'T>) (offset: int) (length: int): byte[] * int =
-        // Extract bytes
+    let inline readFixedData (memory: Memory) (offset: int) (length: int): byte[] * int =
+        // Extract bytes (manual copy since slicing not supported)
         let startIdx = memIndex memory offset
-        let result = memory.Data.[startIdx .. startIdx + length - 1]
-
-        result, offset + (length * 1)
+        let result = Array.zeroCreate length
+        for i = 0 to length - 1 do
+            result.[i] <- memory.Data.[startIdx + i]
+        result, offset + length
 
     /// <summary>
     /// Reads fixed-length data from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
+    /// <param name="offset">The starting offset</param>
     /// <param name="length">The length of data to read</param>
-    /// <returns>The byte array</returns>
-    let inline readFixedDataArray (bytes: byte[]) (offset: byref<int>) (length: int): byte[] =
-        // Extract bytes
-        let result = bytes.[offset .. offset + length - 1]
-        offset <- offset + length
-        result
+    /// <returns>The byte array and the new offset</returns>
+    let inline readFixedDataArray (bytes: byte[]) (offset: int) (length: int): byte[] * int =
+        // Extract bytes (manual copy since slicing not supported)
+        let result = Array.zeroCreate length
+        for i = 0 to length - 1 do
+            result.[i] <- bytes.[offset + i]
+        result, offset + length
 
     /// <summary>
     /// Reads an optional value using F#'s ValueOption for zero-allocation
@@ -435,191 +444,207 @@ module Decoder =
     /// <param name="readValue">A function to read the value if present</param>
     /// <returns>The optional value and the new offset</returns>
     /// <remarks>Throws when the tag is not 0 or 1</remarks>
-    let inline readOptional (memory: Memory<'T>)
+    let inline readOptional (memory: Memory)
                      (offset: int)
-                     (readValue: Memory<'T> -> int -> 'a * int):
+                     (readValue: Memory -> int -> 'a * int):
                      ValueOption<'a> * int =
         let tag = memory.Data.[memIndex memory offset]
         let currentOffset = offset + 1
 
         match tag with
-        | 0uy -> ValueOption<'a>.None, currentOffset
+        | 0uy -> ValueNone, currentOffset
         | 1uy ->
-            let value, newOffset = readValue memory currentOffset
-            ValueOption.Some value, newOffset
-        | _ -> failwith $"Invalid optional tag: {tag}"
+            match readValue memory currentOffset with
+            | (value, newOffset) -> ValueSome value, newOffset
+        | _ -> failwith ("Invalid optional tag: " + string tag)
 
     /// <summary>
     /// Reads an optional value from a byte array using F#'s ValueOption
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <param name="readValue">A function to read the value if present</param>
-    /// <returns>The optional value</returns>
+    /// <param name="offset">The starting offset</param>
+    /// <param name="readValue">A function to read the value if present (returns value and new offset)</param>
+    /// <returns>The optional value and the new offset</returns>
     /// <remarks>Throws when the tag is not 0 or 1</remarks>
     let inline readOptionalArray (bytes: byte[])
-                        (offset: byref<int>)
-                        (readValue: byte[] -> byref<int> -> 'a):
-                        ValueOption<'a> =
+                        (offset: int)
+                        (readValue: byte[] -> int -> 'a * int):
+                        ValueOption<'a> * int =
         let tag = bytes.[offset]
-        offset <- offset + 1
+        let currentOffset = offset + 1
 
         match tag with
-        | 0uy -> ValueOption<'a>.None
+        | 0uy -> ValueNone, currentOffset
         | 1uy ->
-            let value = readValue bytes &offset
-            ValueOption.Some value
-        | _ -> failwith $"Invalid optional tag: {tag}"
+            match readValue bytes currentOffset with
+            | (value, newOffset) -> ValueSome value, newOffset
+        | _ -> failwith ("Invalid optional tag: " + string tag)
 
     /// <summary>
-    /// Reads a list of values
+    /// Reads a list of values (returns as array for FNCS compatibility)
     /// </summary>
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <param name="readValue">A function to read each value</param>
-    /// <returns>The list of values and the new offset</returns>
-    let inline readList (memory: Memory<'T>)
+    /// <returns>The array of values and the new offset</returns>
+    let inline readList (memory: Memory)
                  (offset: int)
-                 (readValue: Memory<'T> -> int -> 'a * int):
-                 'a list * int =
+                 (readValue: Memory -> int -> 'a * int):
+                 'a array * int =
         // Read count
-        let count, currentOffset = readUInt memory offset
+        match readUInt memory offset with
+        | (count, currentOffset) ->
+            let countInt = int count
+            // Read each value into array
+            let values = Array.zeroCreate countInt
+            let mutable currentOff = currentOffset
 
-        // Read each value
-        let mutable values = []
-        let mutable currentOff = currentOffset
+            for i = 0 to countInt - 1 do
+                match readValue memory currentOff with
+                | (value, newOffset) ->
+                    values.[i] <- value
+                    currentOff <- newOffset
 
-        for _ in 1UL..count do
-            let value, newOffset = readValue memory currentOff
-            values <- value :: values
-            currentOff <- newOffset
-
-        List.rev values, currentOff
+            values, currentOff
 
     /// <summary>
-    /// Reads a list of values from a byte array
+    /// Reads a list of values from a byte array (returns as array for FNCS compatibility)
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <param name="readValue">A function to read each value</param>
-    /// <returns>The list of values</returns>
+    /// <param name="offset">The starting offset</param>
+    /// <param name="readValue">A function to read each value (returns value and new offset)</param>
+    /// <returns>The array of values and the new offset</returns>
     let inline readListArray (bytes: byte[])
-                    (offset: byref<int>)
-                    (readValue: byte[] -> byref<int> -> 'a):
-                    'a list =
+                    (offset: int)
+                    (readValue: byte[] -> int -> 'a * int):
+                    'a array * int =
         // Read count
-        let count = int (readUIntArray bytes &offset)
+        match readUIntArray bytes offset with
+        | (countVal, currentOffset) ->
+            let count = int countVal
+            // Read each value into array
+            let values = Array.zeroCreate count
+            let mutable currentOff = currentOffset
 
-        // Read each value
-        let mutable values = []
+            for i = 0 to count - 1 do
+                match readValue bytes currentOff with
+                | (value, newOffset) ->
+                    values.[i] <- value
+                    currentOff <- newOffset
 
-        for _ in 1..count do
-            let value = readValue bytes &offset
-            values <- value :: values
-
-        List.rev values
+            values, currentOff
 
     /// <summary>
-    /// Reads a fixed-length list of values
+    /// Reads a fixed-length list of values (returns as array for FNCS compatibility)
     /// </summary>
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <param name="length">The number of elements to read</param>
     /// <param name="readValue">A function to read each value</param>
-    /// <returns>The list of values and the new offset</returns>
-    let inline readFixedList (memory: Memory<'T>)
+    /// <returns>The array of values and the new offset</returns>
+    let inline readFixedList (memory: Memory)
                       (offset: int)
                       (length: int)
-                      (readValue: Memory<'T> -> int -> 'a * int):
-                      'a list * int =
+                      (readValue: Memory -> int -> 'a * int):
+                      'a array * int =
         // Read each value (no length prefix)
-        let mutable values = []
+        let values = Array.zeroCreate length
         let mutable currentOffset = offset
 
-        for _ in 1..length do
-            let value, newOffset = readValue memory currentOffset
-            values <- value :: values
-            currentOffset <- newOffset
+        for i = 0 to length - 1 do
+            match readValue memory currentOffset with
+            | (value, newOffset) ->
+                values.[i] <- value
+                currentOffset <- newOffset
 
-        List.rev values, currentOffset
+        values, currentOffset
 
     /// <summary>
-    /// Reads a fixed-length list of values from a byte array
+    /// Reads a fixed-length list of values from a byte array (returns as array for FNCS compatibility)
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
+    /// <param name="offset">The starting offset</param>
     /// <param name="length">The number of elements to read</param>
-    /// <param name="readValue">A function to read each value</param>
-    /// <returns>The list of values</returns>
+    /// <param name="readValue">A function to read each value (returns value and new offset)</param>
+    /// <returns>The array of values and the new offset</returns>
     let inline readFixedListArray (bytes: byte[])
-                         (offset: byref<int>)
+                         (offset: int)
                          (length: int)
-                         (readValue: byte[] -> byref<int> -> 'a):
-                         'a list =
+                         (readValue: byte[] -> int -> 'a * int):
+                         'a array * int =
         // Read each value (no length prefix)
-        let mutable values = []
+        let values = Array.zeroCreate length
+        let mutable currentOffset = offset
 
-        for _ in 1..length do
-            let value = readValue bytes &offset
-            values <- value :: values
+        for i = 0 to length - 1 do
+            match readValue bytes currentOffset with
+            | (value, newOffset) ->
+                values.[i] <- value
+                currentOffset <- newOffset
 
-        List.rev values
+        values, currentOffset
 
     /// <summary>
-    /// Reads a map of key-value pairs
+    /// Reads a map of key-value pairs (returns as array of tuples for FNCS compatibility)
     /// </summary>
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <param name="readKey">A function to read each key</param>
     /// <param name="readValue">A function to read each value</param>
-    /// <returns>The map of key-value pairs and the new offset</returns>
-    let inline readMap (memory: Memory<'T>)
+    /// <returns>The array of key-value pairs and the new offset</returns>
+    let inline readMap (memory: Memory)
                 (offset: int)
-                (readKey: Memory<'T> -> int -> 'k * int)
-                (readValue: Memory<'T> -> int -> 'v * int):
-                Map<'k, 'v> * int =
+                (readKey: Memory -> int -> 'k * int)
+                (readValue: Memory -> int -> 'v * int):
+                ('k * 'v) array * int =
         // Read count
-        let count, currentOffset = readUInt memory offset
+        match readUInt memory offset with
+        | (count, currentOffset) ->
+            let countInt = int count
+            // Read each key-value pair
+            let pairs = Array.zeroCreate countInt
+            let mutable currentOff = currentOffset
 
-        // Read each key-value pair
-        let mutable map = Map.empty
-        let mutable currentOff = currentOffset
+            for i = 0 to countInt - 1 do
+                match readKey memory currentOff with
+                | (key, keyOffset) ->
+                    match readValue memory keyOffset with
+                    | (value, valueOffset) ->
+                        pairs.[i] <- (key, value)
+                        currentOff <- valueOffset
 
-        for _ in 1UL..count do
-            let key, keyOffset = readKey memory currentOff
-            let value, valueOffset = readValue memory keyOffset
-
-            map <- Map.add key value map
-            currentOff <- valueOffset
-
-        map, currentOff
+            pairs, currentOff
 
     /// <summary>
-    /// Reads a map of key-value pairs from a byte array
+    /// Reads a map of key-value pairs from a byte array (returns as array of tuples for FNCS compatibility)
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <param name="readKey">A function to read each key</param>
-    /// <param name="readValue">A function to read each value</param>
-    /// <returns>The map of key-value pairs</returns>
+    /// <param name="offset">The starting offset</param>
+    /// <param name="readKey">A function to read each key (returns key and new offset)</param>
+    /// <param name="readValue">A function to read each value (returns value and new offset)</param>
+    /// <returns>The array of key-value pairs and the new offset</returns>
     let inline readMapArray (bytes: byte[])
-                   (offset: byref<int>)
-                   (readKey: byte[] -> byref<int> -> 'k)
-                   (readValue: byte[] -> byref<int> -> 'v):
-                   Map<'k, 'v> =
+                   (offset: int)
+                   (readKey: byte[] -> int -> 'k * int)
+                   (readValue: byte[] -> int -> 'v * int):
+                   ('k * 'v) array * int =
         // Read count
-        let count = int (readUIntArray bytes &offset)
+        match readUIntArray bytes offset with
+        | (countVal, currentOffset) ->
+            let count = int countVal
+            // Read each key-value pair
+            let pairs = Array.zeroCreate count
+            let mutable currentOff = currentOffset
 
-        // Read each key-value pair
-        let mutable map = Map.empty
+            for i = 0 to count - 1 do
+                match readKey bytes currentOff with
+                | (key, keyOffset) ->
+                    match readValue bytes keyOffset with
+                    | (value, valueOffset) ->
+                        pairs.[i] <- (key, value)
+                        currentOff <- valueOffset
 
-        for _ in 1..count do
-            let key = readKey bytes &offset
-            let value = readValue bytes &offset
-
-            map <- Map.add key value map
-
-        map
+            pairs, currentOff
 
     /// <summary>
     /// Reads a union value
@@ -628,33 +653,33 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <param name="readValueForTag">A function to read a value based on its tag</param>
     /// <returns>The union tag, value and the new offset</returns>
-    let inline readUnion (memory: Memory<'T>)
+    let inline readUnion (memory: Memory)
                   (offset: int)
-                  (readValueForTag: uint -> Memory<'T> -> int -> 'a * int):
-                  uint * 'a * int =
+                  (readValueForTag: uint32 -> Memory -> int -> 'a * int):
+                  uint32 * 'a * int =
         // Read tag
-        let tagVal, currentOffset = readUInt memory offset
-        let tag = uint tagVal
-
-        // Read value based on tag
-        let value, finalOffset = readValueForTag tag memory currentOffset
-        tag, value, finalOffset
+        match readUInt memory offset with
+        | (tagVal, currentOffset) ->
+            let tag = uint32 tagVal
+            // Read value based on tag
+            match readValueForTag tag memory currentOffset with
+            | (value, finalOffset) -> tag, value, finalOffset
 
     /// <summary>
     /// Reads a union value from a byte array
     /// </summary>
     /// <param name="bytes">The byte array to read from</param>
-    /// <param name="offset">The starting offset (ref parameter updated with new position)</param>
-    /// <param name="readValueForTag">A function to read a value based on its tag</param>
-    /// <returns>The union tag and value</returns>
+    /// <param name="offset">The starting offset</param>
+    /// <param name="readValueForTag">A function to read a value based on its tag (returns value and new offset)</param>
+    /// <returns>The union tag, value and the new offset</returns>
     let inline readUnionArray (bytes: byte[])
-                     (offset: byref<int>)
-                     (readValueForTag: uint -> byte[] -> byref<int> -> 'a):
-                     uint * 'a =
+                     (offset: int)
+                     (readValueForTag: uint32 -> byte[] -> int -> 'a * int):
+                     uint32 * 'a * int =
         // Read tag
-        let tagVal = readUIntArray bytes &offset
-        let tag = uint tagVal
-
-        // Read value based on tag
-        let value = readValueForTag tag bytes &offset
-        tag, value
+        match readUIntArray bytes offset with
+        | (tagVal, currentOffset) ->
+            let tag = uint32 tagVal
+            // Read value based on tag
+            match readValueForTag tag bytes currentOffset with
+            | (value, finalOffset) -> tag, value, finalOffset

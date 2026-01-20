@@ -15,7 +15,7 @@ module Memory =
 
     /// A view into a memory buffer.
     [<Struct>]
-    type Memory<'T> = {
+    type Memory = {
         /// The underlying byte storage
         Data: byte array
 
@@ -46,22 +46,22 @@ module Memory =
 
     module Memory =
         /// Creates a memory view from a byte array.
-        let fromArray (data: byte array) : Memory<'T> =
+        let fromArray (data: byte array) : Memory =
             { Data = data; Offset = 0; Length = data.Length }
 
         /// Creates a zero-filled memory region.
-        let createZeroed (size: int) : Memory<'T> =
+        let createZeroed (size: int) : Memory =
             fromArray (Array.zeroCreate size)
 
         /// Creates a slice of an existing memory region.
-        let slice (mem: Memory<'T>) (off: int) (len: int) : Memory<'U> =
+        let slice (mem: Memory) (off: int) (len: int) : Memory =
             let newOffset = mem.Offset + off
             if newOffset < 0 || len < 0 || newOffset + len > mem.Data.Length then
                 failwith "Slice out of bounds"
             { Data = mem.Data; Offset = newOffset; Length = len }
 
         /// Copies bytes from one memory region to another.
-        let copy (src: Memory<'T>) (dst: Memory<'U>) (count: int) : unit =
+        let copy (src: Memory) (dst: Memory) (count: int) : unit =
             if count < 0 || src.Offset + count > src.Data.Length || dst.Offset + count > dst.Data.Length then
                 failwith "Copy out of bounds"
             for i = 0 to count - 1 do
@@ -92,7 +92,7 @@ module Memory =
             buf.Position <- buf.Position + bytes.Length
 
         /// Gets the written data as a memory view.
-        let toMemory (buf: Buffer) : Memory<unit> =
+        let toMemory (buf: Buffer) : Memory =
             { Data = buf.Data; Offset = 0; Length = buf.Position }
 
         /// Resets the buffer position to the beginning.

@@ -30,6 +30,24 @@ BAREWire ──uses──▶ FNCS PlatformContext (size/alignment resolution)
 - `PlatformContext.resolveSize` - Get byte size for NTUKind
 - `PlatformContext.resolveAlign` - Get alignment for NTUKind
 
+### Memory Regions (NativeGlobals.fs)
+FNCS provides type-safe memory regions via measure types:
+- `MemoryRegions.stack` - Stack memory (automatic cleanup)
+- `MemoryRegions.arena` - Arena/heap memory
+- `MemoryRegions.sram` - Fast on-chip RAM (embedded)
+- `MemoryRegions.flash` - Persistent storage (embedded)
+- `MemoryRegions.peripheral` - Memory-mapped I/O
+- `MemoryRegions.dma` - DMA-accessible memory
+
+### Memory Types
+- `Span<'T, 'region, 'access>` - Fat pointer with region/access safety
+- `ReadOnlySpan<'T, 'region>` - Immutable view
+- `Ptr<'T, 'region, 'access>` - Native pointer with tracking
+- `Arena<'lifetime>` - Bump allocator
+
+**TODO**: BAREWire's Core/Memory.fs defines its own `Memory` and `Buffer` types.
+These should be migrated to use FNCS `Span<uint8, 'region, 'access>` directly.
+
 ### Sys Intrinsics
 - `Sys.clock_gettime` - Get current time
 - `Sys.clock_monotonic` - Monotonic clock
@@ -37,7 +55,11 @@ BAREWire ──uses──▶ FNCS PlatformContext (size/alignment resolution)
 - `Sys.nanosleep` - High-precision sleep
 
 ### Arena (FNCS Intrinsic)
-- Arena allocation for memory regions
+- `Arena.fromPointer` - Create arena from backing memory
+- `Arena.alloc` - Bump allocate
+- `Arena.allocAligned` - Aligned allocation
+- `Arena.remaining` - Query remaining capacity
+- `Arena.reset` - Reset to empty
 
 ## Schema Architecture
 

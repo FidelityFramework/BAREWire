@@ -97,10 +97,18 @@ module Binary =
         [| byte (value &&& 0xFFus); byte (value >>> 8) |]
     
     let getInt32Bytes (value: int32) : byte[] =
-        [| byte (value &&& 0xFF); byte ((value >>> 8) &&& 0xFF); byte ((value >>> 16) &&& 0xFF); byte ((value >>> 24) &&& 0xFF) |]
+        let b0 = byte value
+        let b1 = byte (value >>> 8)
+        let b2 = byte (value >>> 16)
+        let b3 = byte (value >>> 24)
+        [| b0; b1; b2; b3 |]
     
     let getUInt32Bytes (value: uint32) : byte[] =
-        [| byte (value &&& 0xFFu); byte ((value >>> 8) &&& 0xFFu); byte ((value >>> 16) &&& 0xFFu); byte ((value >>> 24) &&& 0xFFu) |]
+        let b0 = byte value
+        let b1 = byte (value >>> 8)
+        let b2 = byte (value >>> 16)
+        let b3 = byte (value >>> 24)
+        [| b0; b1; b2; b3 |]
     
     let getInt64Bytes (value: int64) : byte[] =
         [| byte (value &&& 0xFFL); byte ((value >>> 8) &&& 0xFFL); byte ((value >>> 16) &&& 0xFFL); byte ((value >>> 24) &&& 0xFFL)
@@ -117,14 +125,29 @@ module Binary =
         uint16 bytes.[startIndex] ||| (uint16 bytes.[startIndex + 1] <<< 8)
     
     let toInt32 (bytes: byte[]) (startIndex: int) : int32 =
-        int32 bytes.[startIndex] ||| (int32 bytes.[startIndex + 1] <<< 8) ||| (int32 bytes.[startIndex + 2] <<< 16) ||| (int32 bytes.[startIndex + 3] <<< 24)
+        let b0 : int32 = int32 bytes.[startIndex]
+        let b1 : int32 = int32 bytes.[startIndex + 1]
+        let b2 : int32 = int32 bytes.[startIndex + 2]
+        let b3 : int32 = int32 bytes.[startIndex + 3]
+        let r1 : int32 = b1 <<< 8
+        let r2 : int32 = b2 <<< 16
+        let r3 : int32 = b3 <<< 24
+        b0 ||| r1 ||| r2 ||| r3
     
     let toUInt32 (bytes: byte[]) (startIndex: int) : uint32 =
         uint32 bytes.[startIndex] ||| (uint32 bytes.[startIndex + 1] <<< 8) ||| (uint32 bytes.[startIndex + 2] <<< 16) ||| (uint32 bytes.[startIndex + 3] <<< 24)
     
     let toInt64 (bytes: byte[]) (startIndex: int) : int64 =
-        int64 bytes.[startIndex] ||| (int64 bytes.[startIndex + 1] <<< 8) ||| (int64 bytes.[startIndex + 2] <<< 16) ||| (int64 bytes.[startIndex + 3] <<< 24) |||
-        (int64 bytes.[startIndex + 4] <<< 32) ||| (int64 bytes.[startIndex + 5] <<< 40) ||| (int64 bytes.[startIndex + 6] <<< 48) ||| (int64 bytes.[startIndex + 7] <<< 56)
+        let b0 = int64 bytes.[startIndex]
+        let b1 = int64 bytes.[startIndex + 1]
+        let b2 = int64 bytes.[startIndex + 2]
+        let b3 = int64 bytes.[startIndex + 3]
+        let b4 = int64 bytes.[startIndex + 4]
+        let b5 = int64 bytes.[startIndex + 5]
+        let b6 = int64 bytes.[startIndex + 6]
+        let b7 = int64 bytes.[startIndex + 7]
+        b0 ||| (b1 <<< 8) ||| (b2 <<< 16) ||| (b3 <<< 24) |||
+        (b4 <<< 32) ||| (b5 <<< 40) ||| (b6 <<< 48) ||| (b7 <<< 56)
     
     let toUInt64 (bytes: byte[]) (startIndex: int) : uint64 =
         uint64 bytes.[startIndex] ||| (uint64 bytes.[startIndex + 1] <<< 8) ||| (uint64 bytes.[startIndex + 2] <<< 16) ||| (uint64 bytes.[startIndex + 3] <<< 24) |||

@@ -13,7 +13,7 @@ namespace BAREWire.Core
 /// Simple capability for memory regions (no measure parameters)
 /// For cases where you need to track pointer + length together
 [<Struct>]
-type MemorySpan<'T> = {
+type MemorySpan = {
     /// The base address
     Pointer: nativeint
 
@@ -24,11 +24,11 @@ type MemorySpan<'T> = {
 /// Operations on memory spans
 module MemorySpan =
     /// Creates a span from pointer and length
-    let inline create (ptr: nativeint) (len: int) : MemorySpan<'T> =
+    let inline create (ptr: nativeint) (len: int) : MemorySpan =
         { Pointer = ptr; Length = len }
 
     /// Gets the length
-    let inline length (span: MemorySpan<'T>) = span.Length
+    let inline length (span: MemorySpan) = span.Length
 
     /// Checks if empty
-    let inline isEmpty (span: MemorySpan<'T>) = span.Length = 0
+    let inline isEmpty (span: MemorySpan) = span.Length = 0

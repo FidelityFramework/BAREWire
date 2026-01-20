@@ -38,13 +38,13 @@ module View =
     /// <summary>
     /// A view over a memory region with a specific schema
     /// </summary>
-    type MemoryView<'T> = {
+    type MemoryView = {
         /// The underlying memory region
-        Memory: Memory<'T>
+        Memory: Memory
         /// The schema defining the structure of the data
         Schema: SchemaDefinition
         /// Field offsets cache for faster access
-        FieldOffsets: Map<string, FieldOffset>
+        FieldOffsets: (string * FieldOffset) array  // Map not available in FNCS
     }
 
     // ==========================================================================
@@ -110,7 +110,8 @@ module View =
     /// Reads a 32-bit floating point number
     let readF32 (data: byte[]) (offset: int) : float32 =
         let bits = readU32 data offset
-        BAREWire.Core.Binary.int32BitsToSingle (int32 bits)
+        let bitsI32 : int32 = int32 bits
+        BAREWire.Core.Binary.int32BitsToSingle bitsI32
 
     /// Reads a 64-bit floating point number
     let readF64 (data: byte[]) (offset: int) : float =
@@ -428,7 +429,7 @@ module View =
         | _ -> ""
 
     /// Creates a view over a memory region with a schema
-    let create<'T> (ctx: PlatformContext) (memory: Memory<'T>) (schema: SchemaDefinition) : MemoryView<'T> =
+    let create (ctx: PlatformContext) (memory: Memory) (schema: SchemaDefinition) : MemoryView =
         let fieldOffsets = calculateFieldOffsets ctx schema
         {
             Memory = memory
@@ -437,7 +438,7 @@ module View =
         }
 
     /// Resolves a field path to get its offset in memory
-    let resolveFieldPath<'T> (view: MemoryView<'T>) (fieldPath: FieldPath) : Result<FieldOffset, Error.Error> =
+    let resolveFieldPath (view: MemoryView) (fieldPath: FieldPath) : Result<FieldOffset, Error.Error> =
         let pathString = String.concat "." fieldPath
 
         match Map.tryFind pathString view.FieldOffsets with
@@ -445,7 +446,7 @@ module View =
         | None -> Error (invalidValueError "Field path not found: " + pathString)
 
     /// Gets a field value from a view (simplified - returns boxed value)
-    let getField<'T, 'Field> (view: MemoryView<'T>) (fieldPath: FieldPath) : Result<'Field, Error.Error> =
+    let getField<'Field> (view: MemoryView) (fieldPath: FieldPath) : Result<'Field, Error.Error> =
         match resolveFieldPath view fieldPath with
         | Error e -> Error e
         | Ok fieldOffset ->
@@ -478,7 +479,7 @@ module View =
                 Error (decodingError "Failed to decode field: " + ex.Message)
 
     /// Sets a field value in a view (simplified)
-    let setField<'T, 'Field> (view: MemoryView<'T>) (fieldPath: FieldPath) (value: 'Field) : Result<unit, Error.Error> =
+    let setField<'Field> (view: MemoryView) (fieldPath: FieldPath) (value: 'Field) : Result<unit, Error.Error> =
         match resolveFieldPath view fieldPath with
         | Error e -> Error e
         | Ok fieldOffset ->
@@ -510,21 +511,21 @@ module View =
                 Error (encodingError "Failed to encode field: " + ex.Message)
 
     /// Checks if a field exists in the view
-    let fieldExists<'T> (view: MemoryView<'T>) (fieldPath: FieldPath) : bool =
+    let fieldExists (view: MemoryView) (fieldPath: FieldPath) : bool =
         let pathString = String.concat "." fieldPath
         Map.containsKey pathString view.FieldOffsets
 
     /// Gets all field names at the root level of a view
-    let getRootFieldNames<'T> (view: MemoryView<'T>) : string list =
+    let getRootFieldNames (view: MemoryView) : string list =
         match Map.tryFind view.Schema.Root view.Schema.Types with
         | Some(SchemaType.Aggregate(AggregateType.Struct fields)) ->
             fields |> List.map (fun field -> field.Name)
         | _ -> []
 
     /// Applies a function to transform a field value
-    let updateField<'T, 'Field> (view: MemoryView<'T>) (fieldPath: FieldPath) (updateFn: 'Field -> 'Field) : Result<unit, Error.Error> =
-        match getField<'T, 'Field> view fieldPath with
+    let updateField<'Field> (view: MemoryView) (fieldPath: FieldPath) (updateFn: 'Field -> 'Field) : Result<unit, Error.Error> =
+        match getField<'Field> view fieldPath with
         | Error e -> Error e
         | Ok currentValue ->
             let newValue = updateFn currentValue
-            setField<'T, 'Field> view fieldPath newValue
+            setField<'Field> view fieldPath newValue

@@ -37,8 +37,49 @@ type SchemaType =
 
 - **Build**: Firefly using `.fidproj`
 - **BCL .fsproj**: DELETED to avoid confusion
-- **Status**: 237 FNCS type errors (down from 323)
-  - Mostly int/int32, byref handling, string interpolation
+- **Status**: ~130 FNCS type errors (down from 237, originally 323)
+
+### Fixed (January 2026)
+- ✅ Core files (Error.fs, Binary.fs, Memory.fs, Capability.fs, Uuid.fs)
+- ✅ Decoder.fs: byref→tuple conversion, tuple destructuring→match
+- ✅ Hardware/Descriptors.fs: Active patterns→functions with DUs
+- ✅ Memory/View.fs: Phantom type parameters removed
+- ✅ Array slicing→manual loops (no `arr.[a..b]` syntax)
+- ✅ String interpolation→concatenation
+
+### Remaining Blockers
+- Schema files need Map/List/Set/Seq intrinsics
+- View.fs uses box/unbox (not available in FNCS)
+- Missing: max, min, fst, snd, compare
+- Missing: PlatformContext (import path issue?)
+
+### Future: Use FNCS Memory Types
+BAREWire's Core/Memory.fs should migrate to FNCS intrinsics:
+- `Span<'T, 'region, 'access>` instead of local Memory type
+- `MemoryRegions.stack/arena/peripheral/etc.` instead of MemoryRegionKind
+- `Arena<'lifetime>` for bump allocation
+
+## Required FNCS Intrinsics (Missing)
+
+The following F# standard library functions are NOT available as FNCS intrinsics:
+
+| Module | Missing Functions |
+|--------|-------------------|
+| `Map` | empty, add, tryFind, containsKey, values, keys |
+| `List` | map, isEmpty, rev |
+| `Set` | empty, add, contains |
+| `Seq` | append, tryPick, minBy, max |
+| `Option` | map |
+| Core | min, max, compare, fst, snd |
+| Operators | `::` (cons), `@` (append), `not` (logical) |
+
+### Workarounds Used
+
+- Lists converted to arrays (Array.zeroCreate, for loops)
+- Maps converted to arrays of tuples
+- String.concat replaced with custom concatWithSeparator
+- byref parameters converted to tuple returns
+- Memory<'T> phantom type parameter removed (not supported)
 
 ## Key Architectural Principles
 

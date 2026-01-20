@@ -92,7 +92,10 @@ module Error =
     /// <param name="f">The mapping function</param>
     /// <param name="result">The result to map</param>
     /// <returns>A new result with the mapped value</returns>
-    let inline map f result = Result.map f result
+    let inline map f result =
+        match result with
+        | Ok value -> Ok (f value)
+        | Error e -> Error e
         
     /// <summary>
     /// Binds a successful result to the specified function
@@ -100,7 +103,10 @@ module Error =
     /// <param name="f">The binding function</param>
     /// <param name="result">The result to bind</param>
     /// <returns>The result of applying the function to the value</returns>
-    let inline bind f result = Result.bind f result
+    let inline bind f result =
+        match result with
+        | Ok value -> f value
+        | Error e -> Error e
         
     /// <summary>
     /// Maps the error in a failed result using the specified function
@@ -119,8 +125,10 @@ module Error =
     /// <param name="defaultValue">The default value to use if result is Error</param>
     /// <param name="result">The result</param>
     /// <returns>The value or default</returns>
-    let inline defaultValue defaultValue result = 
-        Result.defaultValue defaultValue result
+    let inline defaultValue defVal result = 
+        match result with
+        | Ok value -> value
+        | Error _ -> defVal
         
     /// <summary>
     /// Returns the result, or applies a function to the error to produce a value
@@ -129,7 +137,9 @@ module Error =
     /// <param name="result">The result</param>
     /// <returns>The value or result of the default factory</returns>
     let inline defaultWith defaultFactory result =
-        Result.defaultWith defaultFactory result
+        match result with
+        | Ok value -> value
+        | Error e -> defaultFactory e
         
     /// <summary>
     /// Converts an option to a Result, using the provided error if None
@@ -203,9 +213,25 @@ module Error =
     /// </summary>
     /// <param name="result">The validation result</param>
     /// <returns>The corresponding Error.Result</returns>
+    /// Helper to concatenate strings with separator
+    let private concatWithSeparator (sep: string) (strings: string list) : string =
+        match strings with
+        | [] -> ""
+        | [x] -> x
+        | h :: t ->
+            let mutable result = h
+            let mutable remaining = t
+            while not (match remaining with [] -> true | _ -> false) do
+                match remaining with
+                | x :: rest ->
+                    result <- result + sep + x
+                    remaining <- rest
+                | [] -> ()
+            result
+
     let inline ofValidation result =
         match result with
         | Ok value -> Ok value
         | Error errors -> 
-            let message = String.concat "; " errors
+            let message = concatWithSeparator "; " errors
             Error (validationError message)

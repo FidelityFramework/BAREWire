@@ -13,6 +13,7 @@ sources = [
     "Core/Binary.fs",
     "Core/Uuid.fs",
     "Core/Time.fs",
+    "Hardware/Descriptors.fs",
     "Memory/SafeMemory.fs",
     "Memory/Region.fs",
     "Memory/View.fs",
