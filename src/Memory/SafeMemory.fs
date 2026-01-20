@@ -166,11 +166,11 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>A result containing the int16 value or an error</returns>
-    let readInt16 (data: byte[]) (offset: int) : Result<int16> =
+    let readInt16 (data: byte[]) (offset: int) : Result<int16, Error> =
         try
             Ok (readUnmanaged<int16> data offset)
         with ex ->
-            Error (decodingError $"Failed to read Int16: {ex.Message}")
+            Error (decodingError "Failed to read Int16: " + ex.Message)
     
     /// <summary>
     /// Reads a 32-bit integer from memory
@@ -178,11 +178,11 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>A result containing the int32 value or an error</returns>
-    let readInt32 (data: byte[]) (offset: int) : Result<int32> =
+    let readInt32 (data: byte[]) (offset: int) : Result<int32, Error> =
         try
             Ok (readUnmanaged<int32> data offset)
         with ex ->
-            Error (decodingError $"Failed to read Int32: {ex.Message}")
+            Error (decodingError "Failed to read Int32: " + ex.Message)
     
     /// <summary>
     /// Reads a 64-bit integer from memory
@@ -190,11 +190,11 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>A result containing the int64 value or an error</returns>
-    let readInt64 (data: byte[]) (offset: int) : Result<int64> =
+    let readInt64 (data: byte[]) (offset: int) : Result<int64, Error> =
         try
             Ok (readUnmanaged<int64> data offset)
         with ex ->
-            Error (decodingError $"Failed to read Int64: {ex.Message}")
+            Error (decodingError "Failed to read Int64: " + ex.Message)
     
     /// <summary>
     /// Reads a 32-bit floating point value from memory
@@ -202,11 +202,11 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>A result containing the float32 value or an error</returns>
-    let readFloat32 (data: byte[]) (offset: int) : Result<float32> =
+    let readFloat32 (data: byte[]) (offset: int) : Result<float32, Error> =
         try
             Ok (readUnmanaged<float32> data offset)
         with ex ->
-            Error (decodingError $"Failed to read Float32: {ex.Message}")
+            Error (decodingError "Failed to read Float32: " + ex.Message)
     
     /// <summary>
     /// Reads a 64-bit floating point value from memory
@@ -214,11 +214,11 @@ module SafeMemory =
     /// <param name="data">The memory to read from</param>
     /// <param name="offset">The offset within the memory</param>
     /// <returns>A result containing the float value or an error</returns>
-    let readFloat64 (data: byte[]) (offset: int) : Result<float> =
+    let readFloat64 (data: byte[]) (offset: int) : Result<float, Error> =
         try
             Ok (readUnmanaged<float> data offset)
         with ex ->
-            Error (decodingError $"Failed to read Float64: {ex.Message}")
+            Error (decodingError "Failed to read Float64: " + ex.Message)
     
     /// <summary>
     /// Writes a 16-bit integer to memory
@@ -227,12 +227,12 @@ module SafeMemory =
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The value to write</param>
     /// <returns>A result indicating success or an error</returns>
-    let writeInt16 (data: byte[]) (offset: int) (value: int16) : Result<unit> =
+    let writeInt16 (data: byte[]) (offset: int) (value: int16) : Result<unit, Error> =
         try
             writeUnmanaged<int16> data offset value
             Ok ()
         with ex ->
-            Error (encodingError $"Failed to write Int16: {ex.Message}")
+            Error (encodingError "Failed to write Int16: " + ex.Message)
     
     /// <summary>
     /// Writes a 32-bit integer to memory
@@ -241,12 +241,12 @@ module SafeMemory =
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The value to write</param>
     /// <returns>A result indicating success or an error</returns>
-    let writeInt32 (data: byte[]) (offset: int) (value: int32) : Result<unit> =
+    let writeInt32 (data: byte[]) (offset: int) (value: int32) : Result<unit, Error> =
         try
             writeUnmanaged<int32> data offset value
             Ok ()
         with ex ->
-            Error (encodingError $"Failed to write Int32: {ex.Message}")
+            Error (encodingError "Failed to write Int32: " + ex.Message)
     
     /// <summary>
     /// Writes a 64-bit integer to memory
@@ -255,12 +255,12 @@ module SafeMemory =
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The value to write</param>
     /// <returns>A result indicating success or an error</returns>
-    let writeInt64 (data: byte[]) (offset: int) (value: int64) : Result<unit> =
+    let writeInt64 (data: byte[]) (offset: int) (value: int64) : Result<unit, Error> =
         try
             writeUnmanaged<int64> data offset value
             Ok ()
         with ex ->
-            Error (encodingError $"Failed to write Int64: {ex.Message}")
+            Error (encodingError "Failed to write Int64: " + ex.Message)
     
     /// <summary>
     /// Writes a 32-bit floating point value to memory
@@ -269,12 +269,12 @@ module SafeMemory =
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The value to write</param>
     /// <returns>A result indicating success or an error</returns>
-    let writeFloat32 (data: byte[]) (offset: int) (value: float32) : Result<unit> =
+    let writeFloat32 (data: byte[]) (offset: int) (value: float32) : Result<unit, Error> =
         try
             writeUnmanaged<float32> data offset value
             Ok ()
         with ex ->
-            Error (encodingError $"Failed to write Float32: {ex.Message}")
+            Error (encodingError "Failed to write Float32: " + ex.Message)
     
     /// <summary>
     /// Writes a 64-bit floating point value to memory
@@ -283,9 +283,9 @@ module SafeMemory =
     /// <param name="offset">The offset within the memory</param>
     /// <param name="value">The value to write</param>
     /// <returns>A result indicating success or an error</returns>
-    let writeFloat64 (data: byte[]) (offset: int) (value: float) : Result<unit> =
+    let writeFloat64 (data: byte[]) (offset: int) (value: float) : Result<unit, Error> =
         try
             writeUnmanaged<float> data offset value
             Ok ()
         with ex ->
-            Error (encodingError $"Failed to write Float64: {ex.Message}")
+            Error (encodingError "Failed to write Float64: " + ex.Message)

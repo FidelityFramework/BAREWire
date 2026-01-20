@@ -13,7 +13,7 @@ module Error =
         | DecodingError of message:string
         | EncodingError of message:string
         | TypeMismatchError of expected:string * actual:string
-        | OutOfBoundsError of offset:int<offset> * length:int<bytes>
+        | OutOfBoundsError of offset:int * length:int
         | InvalidValueError of message:string
 
     /// <summary>
@@ -72,12 +72,12 @@ module Error =
     /// <returns>A string representation of the error</returns>
     let inline toString error =
         match error with
-        | SchemaValidationError message -> $"Schema validation error: {message}"
-        | DecodingError message -> $"Decoding error: {message}"
-        | EncodingError message -> $"Encoding error: {message}"
-        | TypeMismatchError(expected, actual) -> $"Type mismatch: expected {expected}, got {actual}"
-        | OutOfBoundsError(offset, length) -> $"Out of bounds: offset {offset}, length {length}"
-        | InvalidValueError message -> $"Invalid value: {message}"
+        | SchemaValidationError message -> "Schema validation error: " + message
+        | DecodingError message -> "Decoding error: " + message
+        | EncodingError message -> "Encoding error: " + message
+        | TypeMismatchError(expected, actual) -> "Type mismatch: expected " + expected + ", got " + actual
+        | OutOfBoundsError(offset, length) -> "Out of bounds: offset " + string offset + ", length " + string length
+        | InvalidValueError message -> "Invalid value: " + message
         
     /// <summary>
     /// Handles an error by converting it to a string

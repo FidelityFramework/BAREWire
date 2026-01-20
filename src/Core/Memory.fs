@@ -1,201 +1,108 @@
 namespace BAREWire.Core
 
-open FSharp.UMX
-#if !FABLE
-open FSharp.NativeInterop
-#endif
+// NOTE: Simplified for FNCS/NTU - BCL scaffolding removed.
+// - FSharp.UMX removed (non-numeric measures now intrinsic to FNCS)
+// - Measure type parameters removed (FNCS provides native type safety)
+// - Uses nativeptr<'T> for native memory operations
 
-/// <summary>
 /// Core memory abstractions for BAREWire.
-/// </summary>
-/// <remarks>
-/// This module contains two categories of types:
-///
-/// **Dual-Target (Firefly + Fable):**
-/// - Buffer: Sequential write buffer used by Encoding module for WREN stack
-///
-/// **Firefly-Only:**
-/// - Memory&lt;'T,'region&gt;: Capability-based memory with region/lifetime tracking
-/// - fromNativePointer: Native pointer interop
-///
-/// The dual-target Buffer enables BAREWire encoding over WebSocket in WREN stack apps.
-/// The Firefly-only Memory types provide compile-time memory safety guarantees.
-/// </remarks>
 [<AutoOpen>]
 module Memory =
 
     // ============================================================================
-    // MEMORY TYPE (Firefly only - capability-based memory model)
+    // MEMORY TYPE - Simple byte buffer view
     // ============================================================================
-    
-    /// <summary>
-    /// A typed view into a memory buffer.
-    /// Uses measure types for region and lifetime safety.
-    /// </summary>
-    /// <typeparam name="'T">The logical type this memory represents</typeparam>
-    /// <typeparam name="'region">Memory region marker (prevents cross-region errors)</typeparam>
+
+    /// A view into a memory buffer.
     [<Struct>]
-    type Memory<'T, [<Measure>] 'region> = {
-        /// <summary>
+    type Memory<'T> = {
         /// The underlying byte storage
-        /// </summary>
-        Data: byte[]
-        
-        /// <summary>
+        Data: byte array
+
         /// Offset into the data array in bytes
-        /// </summary>
-        Offset: int<offset>
-        
-        /// <summary>
+        Offset: int
+
         /// Length of this view in bytes
-        /// </summary>
-        Length: int<bytes>
+        Length: int
     }
 
     // ============================================================================
-    // BUFFER TYPE (Dual-target: Firefly + Fable)
-    // Used by Encoding module for WREN stack WebSocket communication
+    // BUFFER TYPE - Sequential write buffer
     // ============================================================================
 
-    /// <summary>
     /// A mutable buffer for sequential writes.
-    /// Uses struct for value semantics and stack allocation.
-    /// </summary>
-    /// <remarks>
-    /// This type is available in both Firefly and Fable targets.
-    /// In WREN stack apps, it enables BAREWire encoding for WebSocket IPC.
-    /// </remarks>
     [<Struct>]
     type Buffer = {
-        /// <summary>
         /// The underlying byte storage
-        /// </summary>
-        Data: byte[]
-        
-        /// <summary>
+        Data: byte array
+
         /// Current write position
-        /// </summary>
         mutable Position: int
     }
 
     // ============================================================================
-    // MEMORY OPERATIONS (Firefly only)
+    // MEMORY OPERATIONS
     // ============================================================================
 
-    /// <summary>
-    /// Operations on Memory - pure module functions.
-    /// </summary>
-    /// <remarks>
-    /// These operations are Firefly-only. They work with the capability-based
-    /// Memory type that provides compile-time region and lifetime safety.
-    /// </remarks>
     module Memory =
-        /// <summary>
         /// Creates a memory view from a byte array.
-        /// </summary>
-        let fromArray<'T, [<Measure>] 'region> (data: byte[]) : Memory<'T, 'region> =
-            { Data = data
-              Offset = 0<offset>
-              Length = LanguagePrimitives.Int32WithMeasure<bytes> data.Length }
-        
-        /// <summary>
+        let fromArray (data: byte array) : Memory<'T> =
+            { Data = data; Offset = 0; Length = data.Length }
+
         /// Creates a zero-filled memory region.
-        /// </summary>
-        let createZeroed<'T, [<Measure>] 'region> (size: int<bytes>) : Memory<'T, 'region> =
-            fromArray<'T, 'region> (Array.zeroCreate (int size))
-        
-        /// <summary>
+        let createZeroed (size: int) : Memory<'T> =
+            fromArray (Array.zeroCreate size)
+
         /// Creates a slice of an existing memory region.
-        /// No copy - just a narrower view.
-        /// </summary>
-        let slice<'T, 'U, [<Measure>] 'region> 
-                 (mem: Memory<'T, 'region>) 
-                 (off: int<offset>) 
-                 (len: int<bytes>) 
-                 : Memory<'U, 'region> =
-            let newOffset = int mem.Offset + int off
-            if newOffset < 0 || int len < 0 || newOffset + int len > mem.Data.Length then
+        let slice (mem: Memory<'T>) (off: int) (len: int) : Memory<'U> =
+            let newOffset = mem.Offset + off
+            if newOffset < 0 || len < 0 || newOffset + len > mem.Data.Length then
                 failwith "Slice out of bounds"
-            { Data = mem.Data
-              Offset = LanguagePrimitives.Int32WithMeasure<offset> newOffset
-              Length = len }
-        
-        /// <summary>
-        /// Copies data between memory regions.
-        /// </summary>
-        let copy<'T, 'U, [<Measure>] 'region1, [<Measure>] 'region2>
-                (src: Memory<'T, 'region1>)
-                (dst: Memory<'U, 'region2>)
-                (count: int<bytes>) : unit =
-            let srcOff = int src.Offset
-            let dstOff = int dst.Offset
-            let cnt = int count
-            if srcOff + cnt > src.Data.Length || dstOff + cnt > dst.Data.Length then
+            { Data = mem.Data; Offset = newOffset; Length = len }
+
+        /// Copies bytes from one memory region to another.
+        let copy (src: Memory<'T>) (dst: Memory<'U>) (count: int) : unit =
+            if count < 0 || src.Offset + count > src.Data.Length || dst.Offset + count > dst.Data.Length then
                 failwith "Copy out of bounds"
-            Array.blit src.Data srcOff dst.Data dstOff cnt
+            for i = 0 to count - 1 do
+                dst.Data.[dst.Offset + i] <- src.Data.[src.Offset + i]
 
     // ============================================================================
-    // BUFFER OPERATIONS (Dual-target: Firefly + Fable)
+    // BUFFER OPERATIONS
     // ============================================================================
 
-    /// <summary>
-    /// Operations on Buffer - pure module functions.
-    /// </summary>
-    /// <remarks>
-    /// These operations are available in both Firefly and Fable targets.
-    /// Used by the Encoding module for BAREWire serialization.
-    /// </remarks>
     module Buffer =
-        /// <summary>
-        /// Creates a buffer with specified capacity.
-        /// </summary>
+        /// Creates a buffer with the specified capacity.
         let create (capacity: int) : Buffer =
             { Data = Array.zeroCreate capacity; Position = 0 }
-        
-        /// <summary>
-        /// Writes a single byte to the buffer.
-        /// </summary>
+
+        /// Writes a byte to the buffer.
         let writeByte (buf: Buffer byref) (b: byte) : unit =
             if buf.Position >= buf.Data.Length then
                 failwith "Buffer overflow"
             buf.Data.[buf.Position] <- b
             buf.Position <- buf.Position + 1
-        
-        /// <summary>
-        /// Writes a span of bytes to the buffer.
-        /// </summary>
-        let writeBytes (buf: Buffer byref) (bytes: byte[]) : unit =
-            let len = bytes.Length
-            if buf.Position + len > buf.Data.Length then
+
+        /// Writes multiple bytes to the buffer.
+        let writeBytes (buf: Buffer byref) (bytes: byte array) : unit =
+            if buf.Position + bytes.Length > buf.Data.Length then
                 failwith "Buffer overflow"
-            Array.blit bytes 0 buf.Data buf.Position len
-            buf.Position <- buf.Position + len
-        
-        /// <summary>
-        /// Gets the written portion of a buffer as a byte array.
-        /// </summary>
-        let toArray (buf: Buffer) : byte[] =
-            buf.Data.[0 .. buf.Position - 1]
-        
-        /// <summary>
+            for i = 0 to bytes.Length - 1 do
+                buf.Data.[buf.Position + i] <- bytes.[i]
+            buf.Position <- buf.Position + bytes.Length
+
+        /// Gets the written data as a memory view.
+        let toMemory (buf: Buffer) : Memory<unit> =
+            { Data = buf.Data; Offset = 0; Length = buf.Position }
+
         /// Resets the buffer position to the beginning.
-        /// </summary>
         let reset (buf: Buffer byref) : unit =
             buf.Position <- 0
 
-#if !FABLE
-    // ============================================================================
-    // NATIVE POINTER OPERATIONS (Firefly only)
-    // ============================================================================
+        /// Gets the remaining capacity.
+        let remaining (buf: Buffer) : int =
+            buf.Data.Length - buf.Position
 
-    /// <summary>
-    /// Creates a memory view from a native pointer.
-    /// For Firefly native compilation only.
-    /// </summary>
-    let inline fromNativePointer<'T, [<Measure>] 'region> (ptr: nativeint) (size: int<bytes>) : Memory<'T, 'region> =
-        // In Firefly, this creates a capability-backed memory view
-        // The actual implementation is provided by FNCS NativePtr intrinsics
-        { Data = Array.zeroCreate (int size)  // Placeholder - Firefly provides native backing
-          Offset = 0<offset>
-          Length = size }
-#endif
+        /// Gets the current position.
+        let position (buf: Buffer) : int =
+            buf.Position

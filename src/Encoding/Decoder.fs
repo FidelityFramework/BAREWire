@@ -10,7 +10,7 @@ open BAREWire.Core.Error
 module Decoder =
 
     // Helper to compute actual byte index in Memory
-    let inline private memIndex (memory: Memory<'T, 'region>) (localOffset: int<offset>) : int =
+    let inline private memIndex (memory: Memory<'T>) (localOffset: int) : int =
         int memory.Offset + int localOffset
 
     /// <summary>
@@ -19,7 +19,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The decoded uint64 value and the new offset</returns>
-    let inline readUInt (memory: Memory<'T, 'region>) (offset: int<offset>): uint64 * int<offset> =
+    let inline readUInt (memory: Memory<'T>) (offset: int): uint64 * int =
         let mutable result = 0UL
         let mutable shift = 0
         let mutable currentOffset = offset
@@ -28,7 +28,7 @@ module Decoder =
         let mutable shouldContinue = true
         while shouldContinue do
             currentByte <- memory.Data.[memIndex memory currentOffset]
-            currentOffset <- currentOffset + 1<offset>
+            currentOffset <- currentOffset + 1
 
             result <- result ||| ((uint64 (currentByte &&& 0x7Fuy)) <<< shift)
             shift <- shift + 7
@@ -64,7 +64,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The decoded int64 value and the new offset</returns>
-    let inline readInt (memory: Memory<'T, 'region>) (offset: int<offset>): int64 * int<offset> =
+    let inline readInt (memory: Memory<'T>) (offset: int): int64 * int =
         let uintVal, newOffset = readUInt memory offset
 
         // Zigzag decoding: (n >>> 1) ^ -(n &&& 1)
@@ -89,9 +89,9 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The offset to read at</param>
     /// <returns>The byte value and the new offset</returns>
-    let inline readU8 (memory: Memory<'T, 'region>) (offset: int<offset>): byte * int<offset> =
+    let inline readU8 (memory: Memory<'T>) (offset: int): byte * int =
         let value = memory.Data.[memIndex memory offset]
-        value, offset + 1<offset>
+        value, offset + 1
 
     /// <summary>
     /// Reads a u8 (byte) value from a byte array
@@ -110,10 +110,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint16 value and the new offset</returns>
-    let inline readU16 (memory: Memory<'T, 'region>) (offset: int<offset>): uint16 * int<offset> =
+    let inline readU16 (memory: Memory<'T>) (offset: int): uint16 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt16 memory.Data idx
-        value, offset + 2<offset>
+        value, offset + 2
 
     /// <summary>
     /// Reads a u16 value in little-endian format from a byte array
@@ -132,10 +132,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint32 value and the new offset</returns>
-    let inline readU32 (memory: Memory<'T, 'region>) (offset: int<offset>): uint32 * int<offset> =
+    let inline readU32 (memory: Memory<'T>) (offset: int): uint32 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt32 memory.Data idx
-        value, offset + 4<offset>
+        value, offset + 4
 
     /// <summary>
     /// Reads a u32 value in little-endian format from a byte array
@@ -154,10 +154,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint64 value and the new offset</returns>
-    let inline readU64 (memory: Memory<'T, 'region>) (offset: int<offset>): uint64 * int<offset> =
+    let inline readU64 (memory: Memory<'T>) (offset: int): uint64 * int =
         let idx = memIndex memory offset
         let value = Binary.toUInt64 memory.Data idx
-        value, offset + 8<offset>
+        value, offset + 8
 
     /// <summary>
     /// Reads a u64 value in little-endian format from a byte array
@@ -176,9 +176,9 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The offset to read at</param>
     /// <returns>The sbyte value and the new offset</returns>
-    let inline readI8 (memory: Memory<'T, 'region>) (offset: int<offset>): sbyte * int<offset> =
+    let inline readI8 (memory: Memory<'T>) (offset: int): sbyte * int =
         let value = sbyte memory.Data.[memIndex memory offset]
-        value, offset + 1<offset>
+        value, offset + 1
 
     /// <summary>
     /// Reads an i8 (sbyte) value from a byte array
@@ -197,10 +197,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int16 value and the new offset</returns>
-    let inline readI16 (memory: Memory<'T, 'region>) (offset: int<offset>): int16 * int<offset> =
+    let inline readI16 (memory: Memory<'T>) (offset: int): int16 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt16 memory.Data idx
-        value, offset + 2<offset>
+        value, offset + 2
 
     /// <summary>
     /// Reads an i16 value in little-endian format from a byte array
@@ -219,10 +219,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int32 value and the new offset</returns>
-    let inline readI32 (memory: Memory<'T, 'region>) (offset: int<offset>): int32 * int<offset> =
+    let inline readI32 (memory: Memory<'T>) (offset: int): int32 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt32 memory.Data idx
-        value, offset + 4<offset>
+        value, offset + 4
 
     /// <summary>
     /// Reads an i32 value in little-endian format from a byte array
@@ -241,10 +241,10 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The int64 value and the new offset</returns>
-    let inline readI64 (memory: Memory<'T, 'region>) (offset: int<offset>): int64 * int<offset> =
+    let inline readI64 (memory: Memory<'T>) (offset: int): int64 * int =
         let idx = memIndex memory offset
         let value = Binary.toInt64 memory.Data idx
-        value, offset + 8<offset>
+        value, offset + 8
 
     /// <summary>
     /// Reads an i64 value in little-endian format from a byte array
@@ -263,7 +263,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The float32 value and the new offset</returns>
-    let inline readF32 (memory: Memory<'T, 'region>) (offset: int<offset>): float32 * int<offset> =
+    let inline readF32 (memory: Memory<'T>) (offset: int): float32 * int =
         let bits, newOffset = readI32 memory offset
         let value = Binary.int32BitsToSingle bits
         value, newOffset
@@ -284,7 +284,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The double value and the new offset</returns>
-    let inline readF64 (memory: Memory<'T, 'region>) (offset: int<offset>): float * int<offset> =
+    let inline readF64 (memory: Memory<'T>) (offset: int): float * int =
         let bits, newOffset = readI64 memory offset
         let value = Binary.int64BitsToDouble bits
         value, newOffset
@@ -306,11 +306,11 @@ module Decoder =
     /// <param name="offset">The offset to read at</param>
     /// <returns>The boolean value and the new offset</returns>
     /// <remarks>Throws when the byte is not 0 or 1</remarks>
-    let inline readBool (memory: Memory<'T, 'region>) (offset: int<offset>): bool * int<offset> =
+    let inline readBool (memory: Memory<'T>) (offset: int): bool * int =
         let b = memory.Data.[memIndex memory offset]
         match b with
-        | 0uy -> false, offset + 1<offset>
-        | 1uy -> true, offset + 1<offset>
+        | 0uy -> false, offset + 1
+        | 1uy -> true, offset + 1
         | _ -> failwith $"Invalid boolean value: {b}"
 
     /// <summary>
@@ -334,7 +334,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The string value and the new offset</returns>
-    let inline readString (memory: Memory<'T, 'region>) (offset: int<offset>): string * int<offset> =
+    let inline readString (memory: Memory<'T>) (offset: int): string * int =
         // Read length
         let length, currentOffset = readUInt memory offset
         if length = 0UL then
@@ -345,7 +345,7 @@ module Decoder =
             let strBytes = memory.Data.[startIdx .. startIdx + int length - 1]
             let str = Utf8.getString strBytes
 
-            str, currentOffset + (int length * 1<offset>)
+            str, currentOffset + (int length * 1)
 
     /// <summary>
     /// Reads a string value from a byte array
@@ -371,7 +371,7 @@ module Decoder =
     /// <param name="memory">The memory region to read from</param>
     /// <param name="offset">The starting offset</param>
     /// <returns>The byte array and the new offset</returns>
-    let inline readData (memory: Memory<'T, 'region>) (offset: int<offset>): byte[] * int<offset> =
+    let inline readData (memory: Memory<'T>) (offset: int): byte[] * int =
         // Read length
         let length, currentOffset = readUInt memory offset
         if length = 0UL then
@@ -381,7 +381,7 @@ module Decoder =
             let startIdx = memIndex memory currentOffset
             let result = memory.Data.[startIdx .. startIdx + int length - 1]
 
-            result, currentOffset + (int length * 1<offset>)
+            result, currentOffset + (int length * 1)
 
     /// <summary>
     /// Reads a variable-length data value from a byte array
@@ -407,12 +407,12 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <param name="length">The length of data to read</param>
     /// <returns>The byte array and the new offset</returns>
-    let inline readFixedData (memory: Memory<'T, 'region>) (offset: int<offset>) (length: int): byte[] * int<offset> =
+    let inline readFixedData (memory: Memory<'T>) (offset: int) (length: int): byte[] * int =
         // Extract bytes
         let startIdx = memIndex memory offset
         let result = memory.Data.[startIdx .. startIdx + length - 1]
 
-        result, offset + (length * 1<offset>)
+        result, offset + (length * 1)
 
     /// <summary>
     /// Reads fixed-length data from a byte array
@@ -435,12 +435,12 @@ module Decoder =
     /// <param name="readValue">A function to read the value if present</param>
     /// <returns>The optional value and the new offset</returns>
     /// <remarks>Throws when the tag is not 0 or 1</remarks>
-    let inline readOptional (memory: Memory<'T, 'region>)
-                     (offset: int<offset>)
-                     (readValue: Memory<'T, 'region> -> int<offset> -> 'a * int<offset>):
-                     ValueOption<'a> * int<offset> =
+    let inline readOptional (memory: Memory<'T>)
+                     (offset: int)
+                     (readValue: Memory<'T> -> int -> 'a * int):
+                     ValueOption<'a> * int =
         let tag = memory.Data.[memIndex memory offset]
-        let currentOffset = offset + 1<offset>
+        let currentOffset = offset + 1
 
         match tag with
         | 0uy -> ValueOption<'a>.None, currentOffset
@@ -478,10 +478,10 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <param name="readValue">A function to read each value</param>
     /// <returns>The list of values and the new offset</returns>
-    let inline readList (memory: Memory<'T, 'region>)
-                 (offset: int<offset>)
-                 (readValue: Memory<'T, 'region> -> int<offset> -> 'a * int<offset>):
-                 'a list * int<offset> =
+    let inline readList (memory: Memory<'T>)
+                 (offset: int)
+                 (readValue: Memory<'T> -> int -> 'a * int):
+                 'a list * int =
         // Read count
         let count, currentOffset = readUInt memory offset
 
@@ -527,11 +527,11 @@ module Decoder =
     /// <param name="length">The number of elements to read</param>
     /// <param name="readValue">A function to read each value</param>
     /// <returns>The list of values and the new offset</returns>
-    let inline readFixedList (memory: Memory<'T, 'region>)
-                      (offset: int<offset>)
+    let inline readFixedList (memory: Memory<'T>)
+                      (offset: int)
                       (length: int)
-                      (readValue: Memory<'T, 'region> -> int<offset> -> 'a * int<offset>):
-                      'a list * int<offset> =
+                      (readValue: Memory<'T> -> int -> 'a * int):
+                      'a list * int =
         // Read each value (no length prefix)
         let mutable values = []
         let mutable currentOffset = offset
@@ -573,11 +573,11 @@ module Decoder =
     /// <param name="readKey">A function to read each key</param>
     /// <param name="readValue">A function to read each value</param>
     /// <returns>The map of key-value pairs and the new offset</returns>
-    let inline readMap (memory: Memory<'T, 'region>)
-                (offset: int<offset>)
-                (readKey: Memory<'T, 'region> -> int<offset> -> 'k * int<offset>)
-                (readValue: Memory<'T, 'region> -> int<offset> -> 'v * int<offset>):
-                Map<'k, 'v> * int<offset> =
+    let inline readMap (memory: Memory<'T>)
+                (offset: int)
+                (readKey: Memory<'T> -> int -> 'k * int)
+                (readValue: Memory<'T> -> int -> 'v * int):
+                Map<'k, 'v> * int =
         // Read count
         let count, currentOffset = readUInt memory offset
 
@@ -628,10 +628,10 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <param name="readValueForTag">A function to read a value based on its tag</param>
     /// <returns>The union tag, value and the new offset</returns>
-    let inline readUnion (memory: Memory<'T, 'region>)
-                  (offset: int<offset>)
-                  (readValueForTag: uint -> Memory<'T, 'region> -> int<offset> -> 'a * int<offset>):
-                  uint * 'a * int<offset> =
+    let inline readUnion (memory: Memory<'T>)
+                  (offset: int)
+                  (readValueForTag: uint -> Memory<'T> -> int -> 'a * int):
+                  uint * 'a * int =
         // Read tag
         let tagVal, currentOffset = readUInt memory offset
         let tag = uint tagVal

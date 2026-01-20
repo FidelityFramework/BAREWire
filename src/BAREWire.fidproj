@@ -2,11 +2,10 @@
 name = "BAREWire"
 version = "0.1.0"
 authors = ["Houston Haynes"]
-description = "Binary data encoding, memory mapping, and communication."
+description = "Binary data encoding, memory mapping, and communication for the Fidelity ecosystem."
 
 [build]
 sources = [
-    "Core/Types.fs",
     "Core/Capability.fs",
     "Core/Memory.fs",
     "Core/Error.fs",
@@ -28,3 +27,5 @@ sources = [
 ]
 
 [dependencies]
+# BAREWire uses NTUKind from FNCS - types are NOT defined locally
+# FNCS provides: NTUKind, PlatformContext, resolveSize, resolveAlign

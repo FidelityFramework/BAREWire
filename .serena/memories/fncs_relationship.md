@@ -2,13 +2,33 @@
 
 ## Architecture
 
-BAREWire uses FNCS intrinsics directly for platform operations:
+BAREWire **DEFERS** to FNCS for all type information. There is no local type system.
 
 ```
-BAREWire ──uses intrinsics from──▶ FNCS (F# Native Compiler Services)
+BAREWire ──defers to──▶ FNCS NTUKind (Native Type Universe)
+BAREWire ──uses──▶ FNCS PlatformContext (size/alignment resolution)
 ```
+
+## Critical Principle: NTUKind IS the Type System
+
+**BAREWire does NOT define its own primitive types.** The old `Types.fs` with `PrimitiveType` DU was DELETED (January 2026).
+
+| Before | After |
+|--------|-------|
+| `PrimitiveType.U8` | `NTUKind.NTUuint8` |
+| `PrimitiveType.I32` | `NTUKind.NTUint32` |
+| `PrimitiveType.String` | `NTUKind.NTUstring` |
+| `Type.Primitive` | `SchemaType.NTU(kind, encoding)` |
+| Hardcoded sizes | `PlatformContext.resolveSize ctx kind` |
+| Hardcoded alignment | `PlatformContext.resolveAlign ctx kind` |
 
 ## What BAREWire Uses from FNCS
+
+### NativeTypedTree.NativeTypes
+- `NTUKind` - The native type universe (35 type kinds)
+- `PlatformContext` - Platform info (WordSize, PointerSize, PointerAlign)
+- `PlatformContext.resolveSize` - Get byte size for NTUKind
+- `PlatformContext.resolveAlign` - Get alignment for NTUKind
 
 ### Sys Intrinsics
 - `Sys.clock_gettime` - Get current time
@@ -16,29 +36,56 @@ BAREWire ──uses intrinsics from──▶ FNCS (F# Native Compiler Services)
 - `Sys.tick_frequency` - Timer frequency
 - `Sys.nanosleep` - High-precision sleep
 
-### NativePtr Operations (F# Core)
-- `NativePtr.read` / `NativePtr.write` - Memory access
-- `NativePtr.ofNativeInt` / `NativePtr.toNativeInt` - Pointer conversion
+### Arena (FNCS Intrinsic)
+- Arena allocation for memory regions
 
-### String Semantics
-Standard F# `string` with FNCS native semantics (UTF-8 fat pointer).
+## Schema Architecture
 
-## What BAREWire Does NOT Use
+BAREWire schemas pair NTUKind with wire encoding:
 
-- **No Alloy** - Alloy was absorbed into FNCS (January 2026)
-- **No BCL** - Pure F# with FNCS intrinsics
-- **No Runtime** - Compiles to freestanding native code
+```fsharp
+type WireEncoding =
+    | Fixed          // Natural size from NTU
+    | VarInt         // LEB128 variable-length
+    | LengthPrefixed // Length prefix + content
+
+type SchemaType =
+    | NTU of kind: NTUKind * encoding: WireEncoding
+    | FixedData of length: int
+    | Enum of baseKind: NTUKind * values: Map<string, uint64>
+    | Aggregate of AggregateType
+    | TypeRef of name: string
+```
+
+## Platform Width Resolution
+
+Sizes are NOT hardcoded. They come from FNCS PlatformContext:
+
+```fsharp
+let getTypeSize (ctx: PlatformContext) (schema: SchemaDefinition) (typ: SchemaType) =
+    match typ with
+    | SchemaType.NTU(kind, WireEncoding.Fixed) ->
+        let size = PlatformContext.resolveSize ctx kind  // Platform-specific!
+        { Min = size; Max = Some size; IsFixed = true }
+```
 
 ## Layer Position
 
 | Layer | Component | Role |
 |-------|-----------|------|
-| 1 | FNCS Intrinsics | Compiler-level primitives |
-| 2 | **BAREWire** | Memory descriptors, serialization |
-| 3 | Farscape | Hardware binding generation |
-| 4 | User Code | Application logic |
+| 1 | FNCS NTUKind | Type identity (what the type IS) |
+| 2 | FNCS PlatformContext | Platform metadata (sizes, alignment) |
+| 3 | **BAREWire SchemaType** | Wire encoding strategy |
+| 4 | **BAREWire Schema** | Message structure definition |
 
 ## Compilation
 
-BAREWire compiles with Firefly, not `dotnet build`.
-Uses `.fidproj` format for project configuration.
+BAREWire compiles with Firefly using `.fidproj` format.
+BCL `.fsproj` was DELETED to avoid confusion.
+
+## Current Build Status (January 2026)
+
+Schema architecture is complete. Remaining FNCS type system alignment needed:
+- `int` vs `int32` (FNCS is stricter)
+- `byref` parameter handling
+- String interpolation semantics

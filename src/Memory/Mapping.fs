@@ -1,6 +1,5 @@
 namespace BAREWire.Memory
 
-open FSharp.UMX
 open BAREWire.Core
 
 /// <summary>
@@ -37,7 +36,7 @@ module Mapping =
         Address: nativeint
 
         /// <summary>Size of the mapped region in bytes</summary>
-        Size: int<bytes>
+        Size: int
 
         /// <summary>Type of mapping (private or shared)</summary>
         Type: MappingType

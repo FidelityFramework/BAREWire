@@ -1,67 +1,75 @@
 # BAREWire Architecture Status - January 2026
 
-## Current State: CLEAN
+## Current State: NTU INTEGRATED
 
-BAREWire is now a pure F# library with no BCL dependencies:
+BAREWire now defers to FNCS NTUKind for all type information:
 
-- ✅ **No Alloy dependencies** - All absorbed into FNCS
-- ✅ **No BCL code** - No `System.*` in source code
-- ✅ **No BCL patterns** - DUs + modules instead of interfaces
-- ✅ **Clean XML docs** - No `<exception cref="System.Exception">`
+- ✅ **Types.fs DELETED** - No local type system, NTUKind IS the type system
+- ✅ **Schema uses NTUKind** - `SchemaType.NTU(kind, encoding)` pattern
+- ✅ **Platform-resolved sizes** - `PlatformContext.resolveSize/resolveAlign`
+- ✅ **No BCL** - Pure F#, compiles with Firefly
+- ⚠️ **FNCS type alignment** - Some int/int32, byref issues remaining
 
-## Compilation Targets
+## Schema Architecture
 
-- **Firefly (native)**: Uses NativePtr, FNCS Sys intrinsics
-- **Fable (JavaScript)**: Uses Fable.Core JS interop
+The schema layer pairs FNCS types with wire encoding:
 
-## Key Files
+```fsharp
+type SchemaType =
+    | NTU of kind: NTUKind * encoding: WireEncoding
+    | FixedData of length: int
+    | Enum of baseKind: NTUKind * values: Map<string, uint64>
+    | Aggregate of AggregateType
+    | TypeRef of name: string
+```
 
-| File | Purpose |
-|------|---------|
-| `Core/Capability.fs` | Lifetime measure types (stack, arena, static', heap) |
-| `Core/Memory.fs` | Memory<'T,'region> + Buffer struct |
-| `Core/Binary.fs` | Pure bit conversion (NativePtr/JS DataView) |
-| `Core/Time.fs` | FNCS Sys intrinsics (clock_gettime, nanosleep) |
-| `Core/Utf8.fs` | Pure UTF-8 encoding |
-| `Encoding/Encoder.fs` | BARE encoding with Buffer |
-| `Encoding/Decoder.fs` | BARE decoding from arrays |
+### Key Files Changed
 
-## Architectural Decisions
+| File | Change |
+|------|--------|
+| `Core/Types.fs` | **DELETED** |
+| `Schema/Definition.fs` | Uses NTUKind, defines SchemaType |
+| `Schema/Analysis.fs` | Uses PlatformContext.resolveSize/resolveAlign |
+| `Schema/Validation.fs` | Validates SchemaType |
+| `Schema/DSL.fs` | Fluent API using Bare.* constructors |
 
-### Fable Support
-Fable blocks exist for JavaScript compilation via `#if FABLE`.
-Question pending: Should Fable support be removed since BAREWire is designed for native memory operations?
+## Compilation
 
-### Memory Model
-Uses capability-based memory with measure types for:
-- Region tracking (`'region`)
-- Access control (`ReadOnly`, `ReadWrite`, `WriteOnly`)
-- Lifetime tracking (`stack`, `arena`, `static'`, `heap`)
+- **Build**: Firefly using `.fidproj`
+- **BCL .fsproj**: DELETED to avoid confusion
+- **Status**: 237 FNCS type errors (down from 323)
+  - Mostly int/int32, byref handling, string interpolation
 
-## HelloWorld Integration Points
+## Key Architectural Principles
 
-1. **String literals** → static lifetime capability
-2. **readln result** → stack lifetime (PROBLEM: currently dies when frame pops)
-3. **Concatenation** → must allocate with appropriate lifetime
-4. **writeln argument** → borrows capability for I/O duration
+### 1. NTUKind IS the Type System
+BAREWire does NOT define its own primitives. It defers completely to FNCS.
 
-## Completed (January 2026)
+### 2. Platform Widths at Resolution Time
+No hardcoded sizes. Everything flows through PlatformContext:
+```fsharp
+let size = PlatformContext.resolveSize ctx NTUKind.NTUint32
+// Returns 4 on all platforms for int32
+```
 
-- ✅ **readln stack lifetime issue SOLVED** - Arena elevated to FNCS intrinsic
-- ✅ **Sample 02 (HelloWorldSaturated)** demonstrates full Arena lifecycle
-- ✅ **Arena.fromPointer, alloc, etc.** working in native compilation
+### 3. WireEncoding is Separate from Type
+A type's identity (NTUKind) is separate from how it's encoded on the wire:
+- `NTUint64 + Fixed` → 8 bytes
+- `NTUint64 + VarInt` → 1-10 bytes (LEB128)
 
-## Future Work
+## Remaining Work
 
-- Level 2 hints: `arena { }` computation expression, `[<UseArena>]` attribute  
-- Level 1 inference: Full escape analysis for automatic arena injection
+### FNCS Type Alignment
+- `int` vs `int32` (FNCS is stricter)
+- `byref<int>` parameter handling in Decoder.fs
+- String interpolation for non-string types
+- Result type alias visibility
+
+### Future
+- Arena computation expressions
+- Full escape analysis
 
 ## Related Memories
-- `wren_stack_integration` - WREN stack WebSocket communication
-- `fable_target_boundary` - Dual-target module classification
-- `fncs_relationship` - FNCS intrinsics usage
+- `fncs_relationship` - FNCS NTUKind integration details
 - `pure_fsharp_design_principles` - Design constraints
-
-## Cross-References
-- See `barewire_memory_architecture` in Firefly project
-- See `deterministic_memory_management` in Firefly project
+- `native_binding_role` - Platform binding patterns
