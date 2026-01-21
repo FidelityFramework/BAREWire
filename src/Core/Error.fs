@@ -229,9 +229,9 @@ module Error =
                 | [] -> ()
             result
 
-    let inline ofValidation result =
+    let inline ofValidation (result: Result<'T, string list>) : Result<'T, Error> =
         match result with
         | Ok value -> Ok value
-        | Error errors -> 
-            let message = concatWithSeparator "; " errors
+        | Error errorList ->
+            let message = concatWithSeparator "; " errorList
             Error (validationError message)

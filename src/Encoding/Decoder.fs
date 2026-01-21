@@ -1,7 +1,6 @@
 namespace BAREWire.Encoding
 
 open BAREWire.Core
-open BAREWire.Core.Error
 
 /// <summary>
 /// Decoding functions for BARE types.
@@ -113,7 +112,7 @@ module Decoder =
     /// <returns>The uint16 value and the new offset</returns>
     let inline readU16 (memory: Memory) (offset: int): uint16 * int =
         let idx = memIndex memory offset
-        let value = Binary.toUInt16 memory.Data idx
+        let value = Bits.toUInt16 memory.Data idx
         value, offset + 2
 
     /// <summary>
@@ -123,7 +122,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint16 value and the new offset</returns>
     let inline readU16Array (bytes: byte[]) (offset: int): uint16 * int =
-        let value = Binary.toUInt16 bytes offset
+        let value = Bits.toUInt16 bytes offset
         value, offset + 2
 
     /// <summary>
@@ -134,7 +133,7 @@ module Decoder =
     /// <returns>The uint32 value and the new offset</returns>
     let inline readU32 (memory: Memory) (offset: int): uint32 * int =
         let idx = memIndex memory offset
-        let value = Binary.toUInt32 memory.Data idx
+        let value = Bits.toUInt32 memory.Data idx
         value, offset + 4
 
     /// <summary>
@@ -144,7 +143,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint32 value and the new offset</returns>
     let inline readU32Array (bytes: byte[]) (offset: int): uint32 * int =
-        let value = Binary.toUInt32 bytes offset
+        let value = Bits.toUInt32 bytes offset
         value, offset + 4
 
     /// <summary>
@@ -155,7 +154,7 @@ module Decoder =
     /// <returns>The uint64 value and the new offset</returns>
     let inline readU64 (memory: Memory) (offset: int): uint64 * int =
         let idx = memIndex memory offset
-        let value = Binary.toUInt64 memory.Data idx
+        let value = Bits.toUInt64 memory.Data idx
         value, offset + 8
 
     /// <summary>
@@ -165,7 +164,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The uint64 value and the new offset</returns>
     let inline readU64Array (bytes: byte[]) (offset: int): uint64 * int =
-        let value = Binary.toUInt64 bytes offset
+        let value = Bits.toUInt64 bytes offset
         value, offset + 8
 
     /// <summary>
@@ -196,7 +195,7 @@ module Decoder =
     /// <returns>The int16 value and the new offset</returns>
     let inline readI16 (memory: Memory) (offset: int): int16 * int =
         let idx = memIndex memory offset
-        let value = Binary.toInt16 memory.Data idx
+        let value = Bits.toInt16 memory.Data idx
         value, offset + 2
 
     /// <summary>
@@ -206,7 +205,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The int16 value and the new offset</returns>
     let inline readI16Array (bytes: byte[]) (offset: int): int16 * int =
-        let value = Binary.toInt16 bytes offset
+        let value = Bits.toInt16 bytes offset
         value, offset + 2
 
     /// <summary>
@@ -217,7 +216,7 @@ module Decoder =
     /// <returns>The int32 value and the new offset</returns>
     let inline readI32 (memory: Memory) (offset: int): int32 * int =
         let idx = memIndex memory offset
-        let value = Binary.toInt32 memory.Data idx
+        let value = Bits.toInt32 memory.Data idx
         value, offset + 4
 
     /// <summary>
@@ -227,7 +226,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The int32 value and the new offset</returns>
     let inline readI32Array (bytes: byte[]) (offset: int): int32 * int =
-        let value = Binary.toInt32 bytes offset
+        let value = Bits.toInt32 bytes offset
         value, offset + 4
 
     /// <summary>
@@ -238,7 +237,7 @@ module Decoder =
     /// <returns>The int64 value and the new offset</returns>
     let inline readI64 (memory: Memory) (offset: int): int64 * int =
         let idx = memIndex memory offset
-        let value = Binary.toInt64 memory.Data idx
+        let value = Bits.toInt64 memory.Data idx
         value, offset + 8
 
     /// <summary>
@@ -248,7 +247,7 @@ module Decoder =
     /// <param name="offset">The starting offset</param>
     /// <returns>The int64 value and the new offset</returns>
     let inline readI64Array (bytes: byte[]) (offset: int): int64 * int =
-        let value = Binary.toInt64 bytes offset
+        let value = Bits.toInt64 bytes offset
         value, offset + 8
 
     /// <summary>
@@ -260,7 +259,7 @@ module Decoder =
     let inline readF32 (memory: Memory) (offset: int): float32 * int =
         match readI32 memory offset with
         | (bits, newOffset) ->
-            let value = Binary.int32BitsToSingle bits
+            let value = Bits.int32BitsToFloat32 bits
             value, newOffset
 
     /// <summary>
@@ -271,7 +270,7 @@ module Decoder =
     /// <returns>The float32 value and the new offset</returns>
     let inline readF32Array (bytes: byte[]) (offset: int): float32 * int =
         match readI32Array bytes offset with
-        | (bits, newOffset) -> Binary.int32BitsToSingle bits, newOffset
+        | (bits, newOffset) -> Bits.int32BitsToFloat32 bits, newOffset
 
     /// <summary>
     /// Reads an f64 (double) value
@@ -282,7 +281,7 @@ module Decoder =
     let inline readF64 (memory: Memory) (offset: int): float * int =
         match readI64 memory offset with
         | (bits, newOffset) ->
-            let value = Binary.int64BitsToDouble bits
+            let value = Bits.int64BitsToFloat64 bits
             value, newOffset
 
     /// <summary>
@@ -293,7 +292,7 @@ module Decoder =
     /// <returns>The double value and the new offset</returns>
     let inline readF64Array (bytes: byte[]) (offset: int): float * int =
         match readI64Array bytes offset with
-        | (bits, newOffset) -> Binary.int64BitsToDouble bits, newOffset
+        | (bits, newOffset) -> Bits.int64BitsToFloat64 bits, newOffset
 
     /// <summary>
     /// Reads a boolean value
@@ -342,7 +341,7 @@ module Decoder =
                 let strBytes = Array.zeroCreate len
                 for i = 0 to len - 1 do
                     strBytes.[i] <- memory.Data.[startIdx + i]
-                let str = Utf8.getString strBytes
+                let str = String.fromBytes strBytes
                 str, currentOffset + len
 
     /// <summary>
@@ -363,7 +362,7 @@ module Decoder =
                 let strBytes = Array.zeroCreate length
                 for i = 0 to length - 1 do
                     strBytes.[i] <- bytes.[currentOffset + i]
-                let str = Utf8.getString strBytes
+                let str = String.fromBytes strBytes
                 str, currentOffset + length
 
     /// <summary>

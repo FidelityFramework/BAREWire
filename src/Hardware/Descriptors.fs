@@ -1,7 +1,5 @@
 namespace BAREWire.Hardware
 
-open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
-
 /// Memory region classification (from ARM memory map)
 type MemoryRegionKind =
     /// Code/constants, read-only at runtime

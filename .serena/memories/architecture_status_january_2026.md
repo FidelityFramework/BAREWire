@@ -59,19 +59,32 @@ BAREWire's Core/Memory.fs should migrate to FNCS intrinsics:
 - `MemoryRegions.stack/arena/peripheral/etc.` instead of MemoryRegionKind
 - `Arena<'lifetime>` for bump allocation
 
-## Required FNCS Intrinsics (Missing)
+## FNCS Intrinsics Status (Updated January 2026)
 
-The following F# standard library functions are NOT available as FNCS intrinsics:
+### Collection Operations - SIGNIFICANT PROGRESS
+
+| Module | Status | Operations |
+|--------|--------|------------|
+| `List` | ✅ **COMPLETE** | map, fold, filter, exists, forall, length, rev, append, collect (Baker decomposition) |
+| `List` | ✅ **COMPLETE** | empty, isEmpty, head, tail, cons (Alex primitives) |
+| `Map` | ⚠️ Partial | empty, isEmpty (Alex primitives) |
+| `Map` | ❌ Missing | add, tryFind, containsKey, values, keys, toList |
+| `Set` | ⚠️ Partial | empty, isEmpty (Alex primitives) |
+| `Set` | ❌ Missing | add, contains, remove |
+| `Seq` | ✅ Cold | map, filter, take, fold, collect (Alex witnesses) |
+| `Seq` | ❌ Missing | append, tryPick, exists, minBy, max |
+| `Option` | ✅ **COMPLETE** | None, Some, isSome, isNone, get, defaultValue (Alex primitives) |
+| `Option` | ❌ Missing | map, bind, filter |
+
+### Still Missing (For BAREWire)
 
 | Module | Missing Functions |
 |--------|-------------------|
-| `Map` | empty, add, tryFind, containsKey, values, keys |
-| `List` | map, isEmpty, rev |
-| `Set` | empty, add, contains |
-| `Seq` | append, tryPick, minBy, max |
-| `Option` | map |
+| `List` | tryPick, contains, minBy, max |
+| `Map` | add, tryFind, containsKey, values, keys, toList, forall |
+| `Set` | add, contains |
 | Core | min, max, compare, fst, snd |
-| Operators | `::` (cons), `@` (append), `not` (logical) |
+| Operators | `not` (logical) |
 
 ### Workarounds Used
 

@@ -41,7 +41,7 @@ module Encoder =
     let inline writeString (buffer: Buffer byref) (s: string) =
         // Use UTF-8 encoding - works for both .NET and Fable
         // In Firefly, FNCS provides native string semantics
-        let bytes = Utf8.getBytes s
+        let bytes = String.toBytes s
         writeUInt &buffer (uint64 bytes.Length)
         for b in bytes do Buffer.writeByte &buffer b
 

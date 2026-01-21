@@ -9,7 +9,7 @@ open BAREWire.Core.Memory
 /// </summary>
 type IBARECodec<'T> =
     abstract member Encode: Buffer byref -> 'T -> unit
-    abstract member Decode: Memory<unit> -> int -> 'T * int
+    abstract member Decode: Memory -> int -> 'T * int
 
 /// <summary>
 /// High-level API for BAREWire operations.
@@ -25,5 +25,5 @@ module Codec =
     /// <summary>
     /// Decodes a value from a memory region.
     /// </summary>
-    let inline decode (codec: IBARECodec<'T>) (data: Memory<unit>) =
+    let inline decode (codec: IBARECodec<'T>) (data: Memory) =
         codec.Decode data 0
