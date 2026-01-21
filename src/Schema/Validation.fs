@@ -1,8 +1,9 @@
 namespace BAREWire.Schema
 
+open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
+
 // =============================================================================
 // Schema Validation - Ensures schema correctness
-// Uses List instead of seq for FNCS compatibility
 // =============================================================================
 
 module Validation =
@@ -21,14 +22,14 @@ module Validation =
     /// Convert validation error to string
     let errorToString error =
         match error with
-        | CyclicTypeReference typeName -> "Cyclic type reference: " + typeName
-        | UndefinedType typeName -> "Undefined type: " + typeName
-        | InvalidVoidUsage location -> "Invalid void usage at " + location
-        | InvalidMapKeyType typeName -> "Invalid map key type: " + typeName
+        | CyclicTypeReference typeName -> $"Cyclic type reference: {typeName}"
+        | UndefinedType typeName -> $"Undefined type: {typeName}"
+        | InvalidVoidUsage location -> $"Invalid void usage at {location}"
+        | InvalidMapKeyType typeName -> $"Invalid map key type: {typeName}"
         | EmptyEnum -> "Empty enum"
         | EmptyUnion -> "Empty union"
         | EmptyStruct -> "Empty struct"
-        | InvalidFixedLength(length, location) -> "Invalid fixed length " + string length + " at " + location
+        | InvalidFixedLength(length, location) -> $"Invalid fixed length {length} at {location}"
 
     /// Validation context
     type ValidationContext =
@@ -46,13 +47,13 @@ module Validation =
             match path with
             | [] -> ""
             | [ TypeRoot name ] -> name
-            | TypeRoot name :: rest -> name + "." + pathToString rest
-            | StructField name :: rest -> name + "." + pathToString rest
-            | UnionCase :: rest -> "case." + pathToString rest
-            | OptionalValue :: rest -> "optional." + pathToString rest
-            | ListItem :: rest -> "item." + pathToString rest
-            | MapKey :: rest -> "key." + pathToString rest
-            | MapValue :: rest -> "value." + pathToString rest
+            | TypeRoot name :: rest -> $"{name}.{pathToString rest}"
+            | StructField name :: rest -> $"{name}.{pathToString rest}"
+            | UnionCase :: rest -> $"case.{pathToString rest}"
+            | OptionalValue :: rest -> $"optional.{pathToString rest}"
+            | ListItem :: rest -> $"item.{pathToString rest}"
+            | MapKey :: rest -> $"key.{pathToString rest}"
+            | MapValue :: rest -> $"value.{pathToString rest}"
 
         pathToString (List.rev path)
 
@@ -61,49 +62,49 @@ module Validation =
         List.exists (function UnionCase -> true | _ -> false) path
 
     /// Get referenced type names from a schema type
-    let rec getReferencedTypes (typ: SchemaType) : string list =
+    let rec getReferencedTypes (typ: SchemaType) : string seq =
         match typ with
-        | SchemaType.NTU _ -> []
-        | SchemaType.FixedData _ -> []
-        | SchemaType.Enum _ -> []
-        | SchemaType.TypeRef name -> [ name ]
+        | SchemaType.NTU _ -> Seq.empty
+        | SchemaType.FixedData _ -> Seq.empty
+        | SchemaType.Enum _ -> Seq.empty
+        | SchemaType.TypeRef name -> seq { yield name }
         | SchemaType.Aggregate agg ->
             match agg with
             | AggregateType.Optional innerType -> getReferencedTypes innerType
             | AggregateType.List innerType -> getReferencedTypes innerType
             | AggregateType.FixedList(innerType, _) -> getReferencedTypes innerType
             | AggregateType.Map(keyType, valueType) ->
-                List.append (getReferencedTypes keyType) (getReferencedTypes valueType)
+                Seq.append (getReferencedTypes keyType) (getReferencedTypes valueType)
             | AggregateType.Union cases ->
-                cases |> Map.toList |> List.collect (fun (_, v) -> getReferencedTypes v)
+                cases |> Map.values |> Seq.collect getReferencedTypes
             | AggregateType.Struct fields ->
-                fields |> List.collect (fun f -> getReferencedTypes f.FieldType)
+                fields |> Seq.collect (fun f -> getReferencedTypes f.FieldType)
 
     /// Validate type invariants
-    let validateTypeInvariants (typeName: string) (typ: SchemaType) : ValidationError list =
+    let validateTypeInvariants (typeName: string) (typ: SchemaType) : ValidationError seq =
         let rec validateType path t =
             match t with
             | SchemaType.NTU(NTUKind.NTUunit, _) ->
                 // Void/unit can only be used in a union
                 if not (isUnionContext path) then
-                    [ InvalidVoidUsage(typePathToString path) ]
+                    seq { yield InvalidVoidUsage(typePathToString path) }
                 else
-                    []
+                    Seq.empty
 
             | SchemaType.Enum(_, values) ->
-                if Map.isEmpty values then [ EmptyEnum ] else []
+                if Map.isEmpty values then seq { yield EmptyEnum } else Seq.empty
 
             | SchemaType.Aggregate(AggregateType.Union cases) ->
                 if Map.isEmpty cases then
-                    [ EmptyUnion ]
+                    seq { yield EmptyUnion }
                 else
-                    cases |> Map.toList |> List.collect (fun (_, v) -> validateType (UnionCase :: path) v)
+                    cases |> Map.values |> Seq.collect (validateType (UnionCase :: path))
 
             | SchemaType.Aggregate(AggregateType.Struct fields) ->
                 if List.isEmpty fields then
-                    [ EmptyStruct ]
+                    seq { yield EmptyStruct }
                 else
-                    fields |> List.collect (fun f -> validateType (StructField f.Name :: path) f.FieldType)
+                    fields |> Seq.collect (fun f -> validateType (StructField f.Name :: path) f.FieldType)
 
             | SchemaType.Aggregate(AggregateType.Map(keyType, valueType)) ->
                 // Map keys must be valid key types
@@ -113,10 +114,10 @@ module Validation =
                     | SchemaType.NTU(NTUKind.NTUfloat64, _)
                     | SchemaType.NTU(NTUKind.NTUunit, _)
                     | SchemaType.FixedData _ ->
-                        [ InvalidMapKeyType "float/void/data" ]
-                    | _ -> []
+                        seq { yield InvalidMapKeyType "float/void/data" }
+                    | _ -> Seq.empty
                 let valueErrors = validateType (MapValue :: path) valueType
-                List.append keyErrors valueErrors
+                Seq.append keyErrors valueErrors
 
             | SchemaType.Aggregate(AggregateType.Optional innerType) ->
                 validateType (OptionalValue :: path) innerType
@@ -126,11 +127,11 @@ module Validation =
 
             | SchemaType.Aggregate(AggregateType.FixedList(innerType, length)) ->
                 if length <= 0 then
-                    [ InvalidFixedLength(length, typePathToString path) ]
+                    seq { yield InvalidFixedLength(length, typePathToString path) }
                 else
                     validateType (ListItem :: path) innerType
 
-            | _ -> []
+            | _ -> Seq.empty
 
         validateType [ TypeRoot typeName ] typ
 
@@ -154,11 +155,10 @@ module Validation =
                             let referencedTypes = getReferencedTypes typ
                             let newPath = typeName :: path
                             let newVisited = Set.add typeName visited
-                            List.tryPick (fun t -> visit newVisited newPath t) referencedTypes
+                            Seq.tryPick (fun t -> visit newVisited newPath t) referencedTypes
 
-                schema.Types
-                |> Map.keys
-                |> List.tryPick (fun typeName -> visit Set.empty [] typeName)
+                Map.keys schema.Types
+                |> Seq.tryPick (fun typeName -> visit Set.empty [] typeName)
 
             match detectCycles () with
             | Some error -> Error [ error ]
@@ -166,8 +166,9 @@ module Validation =
                 // Check invariants
                 let invariantErrors =
                     schema.Types
-                    |> Map.toList
-                    |> List.collect (fun (name, typ) -> validateTypeInvariants name typ)
+                    |> Map.toSeq
+                    |> Seq.collect (fun (name, typ) -> validateTypeInvariants name typ)
+                    |> Seq.toList
 
                 if not (List.isEmpty invariantErrors) then
                     Error invariantErrors

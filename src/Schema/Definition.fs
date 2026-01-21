@@ -1,5 +1,7 @@
 namespace BAREWire.Schema
 
+open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
+
 // =============================================================================
 // BAREWire Schema Definition
 //
@@ -17,21 +19,9 @@ type WireEncoding =
     /// Length-prefixed encoding (for strings, byte arrays)
     | LengthPrefixed
 
-/// A schema type - NTUKind primitives or aggregate structures
-type SchemaType =
-    /// An NTU type with wire encoding strategy
-    | NTU of kind: NTUKind * encoding: WireEncoding
-    /// Fixed-length byte array
-    | FixedData of length: int
-    /// Enum with named values over an NTU integer type
-    | Enum of baseKind: NTUKind * values: Map<string, uint64>
-    /// Aggregate/composite type
-    | Aggregate of AggregateType
-    /// Reference to a named type in the schema
-    | TypeRef of name: string
-
 /// A field in a BARE struct
-and [<Struct>] StructField = {
+[<Struct>]
+type StructField = {
     Name: string
     FieldType: SchemaType
 }
@@ -44,6 +34,19 @@ and AggregateType =
     | Map of keyType: SchemaType * valueType: SchemaType
     | Union of cases: Map<uint32, SchemaType>
     | Struct of fields: StructField list
+
+/// A schema type - NTUKind primitives or aggregate structures
+and SchemaType =
+    /// An NTU type with wire encoding strategy
+    | NTU of kind: NTUKind * encoding: WireEncoding
+    /// Fixed-length byte array
+    | FixedData of length: int
+    /// Enum with named values over an NTU integer type
+    | Enum of baseKind: NTUKind * values: Map<string, uint64>
+    /// Aggregate/composite type
+    | Aggregate of AggregateType
+    /// Reference to a named type in the schema
+    | TypeRef of name: string
 
 /// A complete schema definition
 [<Struct>]
@@ -95,7 +98,7 @@ module Schema =
 
     /// Get all type names
     let typeNames (schema: SchemaDefinition) : string list =
-        schema.Types |> Map.keys
+        schema.Types |> Map.keys |> Seq.toList
 
 // =============================================================================
 // NTU Type Constructors for BARE wire format
