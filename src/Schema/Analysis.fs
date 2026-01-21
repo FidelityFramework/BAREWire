@@ -89,7 +89,7 @@ module Analysis =
         | SchemaType.TypeRef typeName ->
             match Map.tryFind typeName schema.Types with
             | Some t -> getTypeSize ctx schema t
-            | None -> failwith $"Type not found: {typeName}"
+            | None -> failwith ("Type not found: " + typeName)
 
     /// Get alignment for a schema type
     let rec getTypeAlignment (ctx: PlatformContext) (schema: SchemaDefinition) (typ: SchemaType) : Alignment =
@@ -132,7 +132,7 @@ module Analysis =
         | SchemaType.TypeRef typeName ->
             match Map.tryFind typeName schema.Types with
             | Some t -> getTypeAlignment ctx schema t
-            | None -> failwith $"Type not found: {typeName}"
+            | None -> failwith ("Type not found: " + typeName)
 
     /// Check if two schema types are compatible
     let rec areTypesCompatible
@@ -239,7 +239,7 @@ module Analysis =
                     else
                         Incompatible [ "Root types are different" ]
 
-            | None, _ -> Incompatible [ $"Old root type '{oldSchema.Root}' not found" ]
-            | _, None -> Incompatible [ $"New root type '{newSchema.Root}' not found" ]
+            | None, _ -> Incompatible [String.concat ["Old root type '"; oldSchema.Root; "' not found"]]
+            | _, None -> Incompatible [String.concat ["New root type '"; newSchema.Root; "' not found"]]
 
         checkRootCompatibility ()

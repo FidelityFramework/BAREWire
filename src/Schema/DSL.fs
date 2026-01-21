@@ -1,5 +1,7 @@
 namespace BAREWire.Schema
 
+open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
+
 /// <summary>
 /// Domain-specific language for building schema definitions in a fluent style.
 /// Uses NTUKind from FNCS - BAREWire defers to NTU for all types.
