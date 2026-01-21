@@ -1,7 +1,7 @@
 namespace BAREWire.Encoding
 
-open BAREWire.Core
-open BAREWire.Core.Memory
+open BAREWire.Encoding
+open BAREWire.Encoding.Memory
 
 /// <summary>
 /// Static Codec interface for BAREWire.

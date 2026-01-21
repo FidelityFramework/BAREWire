@@ -6,9 +6,8 @@ description = "Binary data encoding, memory mapping, and communication for the F
 
 [build]
 sources = [
-    "Core/Memory.fs",
-    "Core/Error.fs",
     "Hardware/Descriptors.fs",
+    "Encoding/Memory.fs",
     "Encoding/Encoder.fs",
     "Encoding/Decoder.fs",
     "Encoding/Codec.fs",

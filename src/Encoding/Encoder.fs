@@ -1,6 +1,6 @@
 namespace BAREWire.Encoding
 
-open BAREWire.Core
+open BAREWire.Encoding
 
 /// <summary>
 /// BAREWire encoding functions (Dual-target: Firefly + Fable).

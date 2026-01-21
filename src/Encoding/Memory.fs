@@ -1,11 +1,6 @@
-namespace BAREWire.Core
+namespace BAREWire.Encoding
 
-// NOTE: Simplified for FNCS/NTU - BCL scaffolding removed.
-// - FSharp.UMX removed (non-numeric measures now intrinsic to FNCS)
-// - Measure type parameters removed (FNCS provides native type safety)
-// - Uses nativeptr<'T> for native memory operations
-
-/// Core memory abstractions for BAREWire.
+/// Memory abstractions for BAREWire serialization.
 [<AutoOpen>]
 module Memory =
 
