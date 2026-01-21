@@ -22,14 +22,14 @@ module Validation =
     /// Convert validation error to string
     let errorToString error =
         match error with
-        | CyclicTypeReference typeName -> String.concat ["Cyclic type reference: "; typeName]
-        | UndefinedType typeName -> String.concat ["Undefined type: "; typeName]
-        | InvalidVoidUsage location -> String.concat ["Invalid void usage at "; location]
-        | InvalidMapKeyType typeName -> String.concat ["Invalid map key type: "; typeName]
+        | CyclicTypeReference typeName -> $"Cyclic type reference: {typeName}"
+        | UndefinedType typeName -> $"Undefined type: {typeName}"
+        | InvalidVoidUsage location -> $"Invalid void usage at {location}"
+        | InvalidMapKeyType typeName -> $"Invalid map key type: {typeName}"
         | EmptyEnum -> "Empty enum"
         | EmptyUnion -> "Empty union"
         | EmptyStruct -> "Empty struct"
-        | InvalidFixedLength(length, location) -> String.concat ["Invalid fixed length "; (string length); " at "; location]
+        | InvalidFixedLength(length, location) -> $"Invalid fixed length {length} at {location}"
 
     /// Validation context
     type ValidationContext =
@@ -47,13 +47,13 @@ module Validation =
             match path with
             | [] -> ""
             | [TypeRoot name] -> name
-            | TypeRoot name :: rest -> name + "." + pathToString rest
-            | StructField name :: rest -> name + "." + pathToString rest
-            | UnionCase :: rest -> "case." + pathToString rest
-            | OptionalValue :: rest -> "optional." + pathToString rest
-            | ListItem :: rest -> "item." + pathToString rest
-            | MapKey :: rest -> "key." + pathToString rest
-            | MapValue :: rest -> "value." + pathToString rest
+            | TypeRoot name :: rest -> $"{name}.{pathToString rest}"
+            | StructField name :: rest -> $"{name}.{pathToString rest}"
+            | UnionCase :: rest -> $"case.{pathToString rest}"
+            | OptionalValue :: rest -> $"optional.{pathToString rest}"
+            | ListItem :: rest -> $"item.{pathToString rest}"
+            | MapKey :: rest -> $"key.{pathToString rest}"
+            | MapValue :: rest -> $"value.{pathToString rest}"
 
         pathToString (List.rev path)
 
@@ -77,7 +77,7 @@ module Validation =
             | AggregateType.Map(keyType, valueType) ->
                 List.append (getReferencedTypes keyType) (getReferencedTypes valueType)
             | AggregateType.Union cases ->
-                cases |> Map.values |> List.ofSeq |> List.collect getReferencedTypes
+                cases |> Map.toList |> List.collect (fun (_, v) -> getReferencedTypes v)
             | AggregateType.Struct fields ->
                 fields |> List.collect (fun f -> getReferencedTypes f.FieldType)
 
@@ -100,7 +100,7 @@ module Validation =
                 if Map.isEmpty cases then
                     [EmptyUnion]
                 else
-                    cases |> Map.values |> List.ofSeq |> List.collect (validateType (UnionCase :: path))
+                    cases |> Map.toList |> List.collect (fun (_, v) -> validateType (UnionCase :: path) v)
 
             | SchemaType.Aggregate(AggregateType.Struct fields) ->
                 if List.isEmpty fields then
@@ -160,8 +160,8 @@ module Validation =
                             List.tryPick (fun t -> visit newVisited newPath t) referencedTypes
 
                 schema.Types
-                |> Map.keys
-                |> List.ofSeq
+                |> Map.toList
+                |> List.map fst
                 |> List.tryPick (fun typeName -> visit Set.empty [] typeName)
 
             match detectCycles () with

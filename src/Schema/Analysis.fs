@@ -61,10 +61,10 @@ module Analysis =
                 { Min = 1; Max = None; IsFixed = false }
 
             | AggregateType.Union cases ->
-                let caseSizes = cases |> Map.values |> Seq.map (getTypeSize ctx schema)
-                let minSize = 1 + (Seq.minBy (fun s -> s.Min) caseSizes).Min
+                let caseSizes = cases |> Map.toList |> List.map (fun (_, v) -> getTypeSize ctx schema v)
+                let minSize = 1 + (List.minBy (fun s -> s.Min) caseSizes).Min
                 let maxSize =
-                    Seq.fold (fun acc size ->
+                    List.fold (fun acc size ->
                         match acc, size.Max with
                         | None, _ -> None
                         | _, None -> None
@@ -89,7 +89,7 @@ module Analysis =
         | SchemaType.TypeRef typeName ->
             match Map.tryFind typeName schema.Types with
             | Some t -> getTypeSize ctx schema t
-            | None -> failwith ("Type not found: " + typeName)
+            | None -> failwith $"Type not found: {typeName}"
 
     /// Get alignment for a schema type
     let rec getTypeAlignment (ctx: PlatformContext) (schema: SchemaDefinition) (typ: SchemaType) : Alignment =
@@ -120,8 +120,8 @@ module Analysis =
                 { Value = max keyAlign.Value valueAlign.Value }
 
             | AggregateType.Union cases ->
-                let caseAlignments = cases |> Map.values |> Seq.map (getTypeAlignment ctx schema)
-                let maxAlign = caseAlignments |> Seq.map (fun a -> a.Value) |> Seq.max
+                let caseAlignments = cases |> Map.toList |> List.map (fun (_, v) -> getTypeAlignment ctx schema v)
+                let maxAlign = caseAlignments |> List.map (fun a -> a.Value) |> List.max
                 { Value = max 1 maxAlign }
 
             | AggregateType.Struct fields ->
@@ -132,7 +132,7 @@ module Analysis =
         | SchemaType.TypeRef typeName ->
             match Map.tryFind typeName schema.Types with
             | Some t -> getTypeAlignment ctx schema t
-            | None -> failwith ("Type not found: " + typeName)
+            | None -> failwith $"Type not found: {typeName}"
 
     /// Check if two schema types are compatible
     let rec areTypesCompatible
@@ -239,7 +239,7 @@ module Analysis =
                     else
                         Incompatible [ "Root types are different" ]
 
-            | None, _ -> Incompatible [String.concat ["Old root type '"; oldSchema.Root; "' not found"]]
-            | _, None -> Incompatible [String.concat ["New root type '"; newSchema.Root; "' not found"]]
+            | None, _ -> Incompatible [$"Old root type '{oldSchema.Root}' not found"]
+            | _, None -> Incompatible [$"New root type '{newSchema.Root}' not found"]
 
         checkRootCompatibility ()

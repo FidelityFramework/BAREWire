@@ -64,8 +64,7 @@ module Memory =
         let copy (src: Memory) (dst: Memory) (count: int) : unit =
             if count < 0 || src.Offset + count > src.Data.Length || dst.Offset + count > dst.Data.Length then
                 failwith "Copy out of bounds"
-            for i = 0 to count - 1 do
-                dst.Data.[dst.Offset + i] <- src.Data.[src.Offset + i]
+            Array.blit src.Data src.Offset dst.Data dst.Offset count
 
     // ============================================================================
     // BUFFER OPERATIONS
@@ -87,8 +86,7 @@ module Memory =
         let writeBytes (buf: Buffer byref) (bytes: byte array) : unit =
             if buf.Position + bytes.Length > buf.Data.Length then
                 failwith "Buffer overflow"
-            for i = 0 to bytes.Length - 1 do
-                buf.Data.[buf.Position + i] <- bytes.[i]
+            Array.blit bytes 0 buf.Data buf.Position bytes.Length
             buf.Position <- buf.Position + bytes.Length
 
         /// Gets the written data as a memory view.

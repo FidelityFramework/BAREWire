@@ -306,7 +306,7 @@ module Decoder =
         match b with
         | 0uy -> false, offset + 1
         | 1uy -> true, offset + 1
-        | _ -> failwith ("Invalid boolean value: " + string b)
+        | _ -> failwith $"Invalid boolean value: {b}"
 
     /// <summary>
     /// Reads a boolean value from a byte array
@@ -320,7 +320,7 @@ module Decoder =
         match b with
         | 0uy -> false, offset + 1
         | 1uy -> true, offset + 1
-        | _ -> failwith ("Invalid boolean value: " + string b)
+        | _ -> failwith $"Invalid boolean value: {b}"
 
     /// <summary>
     /// Reads a string value
@@ -455,7 +455,7 @@ module Decoder =
         | 1uy ->
             match readValue memory currentOffset with
             | (value, newOffset) -> ValueSome value, newOffset
-        | _ -> failwith ("Invalid optional tag: " + string tag)
+        | _ -> failwith $"Invalid optional tag: {tag}"
 
     /// <summary>
     /// Reads an optional value from a byte array using F#'s ValueOption
@@ -477,7 +477,7 @@ module Decoder =
         | 1uy ->
             match readValue bytes currentOffset with
             | (value, newOffset) -> ValueSome value, newOffset
-        | _ -> failwith ("Invalid optional tag: " + string tag)
+        | _ -> failwith $"Invalid optional tag: {tag}"
 
     /// <summary>
     /// Reads a list of values (returns as array for FNCS compatibility)

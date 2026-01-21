@@ -96,9 +96,9 @@ module Schema =
     let setRoot (rootTypeName: string) (schema: SchemaDefinition) : SchemaDefinition =
         { schema with Root = rootTypeName }
 
-    /// Get all type names (lazy enumeration)
-    let typeNames (schema: SchemaDefinition) : string seq =
-        schema.Types |> Map.keys
+    /// Get all type names
+    let typeNames (schema: SchemaDefinition) : string list =
+        schema.Types |> Map.toList |> List.map fst
 
 // =============================================================================
 // NTU Type Constructors for BARE wire format
