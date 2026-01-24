@@ -1,14 +1,17 @@
 # BAREWire Architecture Status - January 2026
 
-## Current State: NTU INTEGRATED
+## Current State: FNCS MATURE, ACTIVE INTEGRATION
 
-BAREWire now defers to FNCS NTUKind for all type information:
+**FNCS has reached production maturity (January 2026).** Firefly samples 01-09 all pass with principled implementations. BAREWire is now actively being used by FNCS for wire protocol needs.
+
+### Integration Status
 
 - ✅ **Types.fs DELETED** - No local type system, NTUKind IS the type system
 - ✅ **Schema uses NTUKind** - `SchemaType.NTU(kind, encoding)` pattern
 - ✅ **Platform-resolved sizes** - `PlatformContext.resolveSize/resolveAlign`
 - ✅ **No BCL** - Pure F#, compiles with Firefly
-- ⚠️ **FNCS type alignment** - Some int/int32, byref issues remaining
+- ✅ **FNCS collections mature** - List, Map, Set, Option, Seq all have Baker decomposition
+- ✅ **DU infrastructure complete** - DULayout coeffect for heterogeneous DUs (Result, etc.)
 
 ## Schema Architecture
 
@@ -37,21 +40,20 @@ type SchemaType =
 
 - **Build**: Firefly using `.fidproj`
 - **BCL .fsproj**: DELETED to avoid confusion
-- **Status**: ~130 FNCS type errors (down from 237, originally 323)
+- **Status**: Ready for full integration with FNCS
 
-### Fixed (January 2026)
+### Completed Migrations
 - ✅ Core files (Error.fs, Binary.fs, Memory.fs, Capability.fs, Uuid.fs)
 - ✅ Decoder.fs: byref→tuple conversion, tuple destructuring→match
 - ✅ Hardware/Descriptors.fs: Active patterns→functions with DUs
 - ✅ Memory/View.fs: Phantom type parameters removed
-- ✅ Array slicing→manual loops (no `arr.[a..b]` syntax)
-- ✅ String interpolation→concatenation
+- ✅ Array slicing→manual loops
+- ✅ String operations via FNCS intrinsics
 
-### Remaining Blockers
-- Schema files need Map/List/Set/Seq intrinsics
-- View.fs uses box/unbox (not available in FNCS)
-- Missing: max, min, fst, snd, compare
-- Missing: PlatformContext (import path issue?)
+### FNCS Blockers RESOLVED
+- ✅ Map/List/Set/Seq intrinsics - NOW AVAILABLE via Baker decomposition
+- ✅ Option.map/bind/filter - NOW AVAILABLE
+- ✅ Result type with DULayout coeffect - NOW AVAILABLE
 
 ### Future: Use FNCS Memory Types
 BAREWire's Core/Memory.fs should migrate to FNCS intrinsics:
@@ -59,40 +61,47 @@ BAREWire's Core/Memory.fs should migrate to FNCS intrinsics:
 - `MemoryRegions.stack/arena/peripheral/etc.` instead of MemoryRegionKind
 - `Arena<'lifetime>` for bump allocation
 
-## FNCS Intrinsics Status (Updated January 2026)
+## FNCS Intrinsics Status (January 2026) - MATURE
 
-### Collection Operations - SIGNIFICANT PROGRESS
+### Collection Operations - COMPLETE
 
 | Module | Status | Operations |
 |--------|--------|------------|
-| `List` | ✅ **COMPLETE** | map, fold, filter, exists, forall, length, rev, append, collect (Baker decomposition) |
+| `List` | ✅ **COMPLETE** | map, fold, filter, exists, forall, length, rev, append, collect, contains, tryPick, minBy, max, forall2, sumBy (Baker decomposition) |
 | `List` | ✅ **COMPLETE** | empty, isEmpty, head, tail, cons (Alex primitives) |
-| `Map` | ⚠️ Partial | empty, isEmpty (Alex primitives) |
-| `Map` | ❌ Missing | add, tryFind, containsKey, values, keys, toList |
-| `Set` | ⚠️ Partial | empty, isEmpty (Alex primitives) |
-| `Set` | ❌ Missing | add, contains, remove |
-| `Seq` | ✅ Cold | map, filter, take, fold, collect (Alex witnesses) |
-| `Seq` | ❌ Missing | append, tryPick, exists, minBy, max |
+| `Map` | ✅ **COMPLETE** | toList, toSeq, tryFind, add, containsKey, keys, values, forall (Baker decomposition) |
+| `Map` | ✅ **COMPLETE** | empty, isEmpty (Alex primitives) |
+| `Set` | ✅ **COMPLETE** | add, contains, remove, union, intersect, difference (Baker decomposition) |
+| `Set` | ✅ **COMPLETE** | empty, isEmpty (Alex primitives) |
+| `Seq` | ✅ **COMPLETE** | map, filter, collect, append, toList, toArray, fold, tryPick, max, min, minBy, maxBy, exists, forall, length, isEmpty, head, tryHead (Baker decomposition) |
+| `Seq` | ✅ **COMPLETE** | empty, getEnumerator (Alex primitives) |
+| `Option` | ✅ **COMPLETE** | map, bind, filter (Baker decomposition) |
 | `Option` | ✅ **COMPLETE** | None, Some, isSome, isNone, get, defaultValue (Alex primitives) |
-| `Option` | ❌ Missing | map, bind, filter |
 
-### Still Missing (For BAREWire)
+### DU Infrastructure - COMPLETE
 
-| Module | Missing Functions |
-|--------|-------------------|
-| `List` | tryPick, contains, minBy, max |
-| `Map` | add, tryFind, containsKey, values, keys, toList, forall |
-| `Set` | add, contains |
-| Core | min, max, compare, fst, snd |
-| Operators | `not` (logical) |
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Homogeneous DUs | ✅ | Inline struct representation (e.g., Option) |
+| Heterogeneous DUs | ✅ | Arena allocation with DULayout coeffect (e.g., Result) |
+| Bits coercion | ✅ | float64→int64, float32→int32 for DU slot storage |
 
-### Workarounds Used
+### Coeffect System - COMPLETE
 
-- Lists converted to arrays (Array.zeroCreate, for loops)
-- Maps converted to arrays of tuples
-- String.concat replaced with custom concatWithSeparator
-- byref parameters converted to tuple returns
-- Memory<'T> phantom type parameter removed (not supported)
+| Coeffect | Status | Purpose |
+|----------|--------|---------|
+| NodeSSAAllocation | ✅ | Pre-computed SSA assignments |
+| ClosureLayout | ✅ | Flat closure struct layout |
+| DULayout | ✅ | Arena-allocated DU construction |
+
+### BAREWire Can Now Use
+
+All collection intrinsics are available. No workarounds needed for:
+- List operations (map, fold, filter, etc.)
+- Map operations (add, tryFind, toList, etc.)
+- Set operations (add, contains, union, etc.)
+- Option operations (map, bind, filter)
+- Seq operations (full cold sequence support)
 
 ## Key Architectural Principles
 
@@ -113,15 +122,15 @@ A type's identity (NTUKind) is separate from how it's encoded on the wire:
 
 ## Remaining Work
 
-### FNCS Type Alignment
-- `int` vs `int32` (FNCS is stricter)
-- `byref<int>` parameter handling in Decoder.fs
-- String interpolation for non-string types
-- Result type alias visibility
+### BAREWire-Specific Integration
+- Migrate Core/Memory.fs to use FNCS `Span<uint8, 'region, 'access>` directly
+- Wire up BAREWire schemas to FNCS compilation pipeline
+- Test full encode/decode cycles through Firefly
 
-### Future
+### Future Enhancements
 - Arena computation expressions
-- Full escape analysis
+- Full escape analysis integration
+- IPC patterns for WrenStack integration
 
 ## Related Memories
 - `fncs_relationship` - FNCS NTUKind integration details

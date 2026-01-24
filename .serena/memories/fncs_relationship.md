@@ -1,12 +1,17 @@
 # BAREWire and FNCS Relationship - January 2026
 
+## Status: FNCS MATURE, BIDIRECTIONAL INTEGRATION
+
+**FNCS reached production maturity in January 2026.** Firefly samples 01-09 all pass with principled implementations including full DU infrastructure, closure layouts, and Baker decomposition for all collection operations.
+
 ## Architecture
 
-BAREWire **DEFERS** to FNCS for all type information. There is no local type system.
+BAREWire and FNCS have a **bidirectional relationship**:
 
 ```
 BAREWire ──defers to──▶ FNCS NTUKind (Native Type Universe)
 BAREWire ──uses──▶ FNCS PlatformContext (size/alignment resolution)
+FNCS ──uses──▶ BAREWire (wire protocol for native serialization)
 ```
 
 ## Critical Principle: NTUKind IS the Type System
@@ -107,7 +112,13 @@ BCL `.fsproj` was DELETED to avoid confusion.
 
 ## Current Build Status (January 2026)
 
-Schema architecture is complete. Remaining FNCS type system alignment needed:
-- `int` vs `int32` (FNCS is stricter)
-- `byref` parameter handling
-- String interpolation semantics
+**FNCS is production-ready.** All blockers that were waiting on FNCS intrinsics are now resolved:
+
+| Former Blocker | Status |
+|----------------|--------|
+| Collection intrinsics (List, Map, Set, Seq) | ✅ RESOLVED - Baker decomposition complete |
+| Option.map/bind/filter | ✅ RESOLVED - OptionRecipes implemented |
+| Result type support | ✅ RESOLVED - DULayout coeffect for heterogeneous DUs |
+| Closure captures | ✅ RESOLVED - Flat closure model with ClosureLayout coeffect |
+
+BAREWire schema architecture is complete and ready for full integration with FNCS native compilation.

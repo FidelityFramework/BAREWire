@@ -14,7 +14,7 @@ BAREWire is **Layer 2** in the Fidelity binding architecture - it provides memor
 |-------|------|----------|
 | Layer 1 | FNCS Intrinsics | `Sys.write`, `NativePtr.*` |
 | **Layer 2** | **Binding Libraries (including BAREWire)** | Memory layouts, peripheral descriptors |
-| Layer 3 | User Code | Alloy, applications |
+| Layer 3 | User Code | Fidelity.Platform, applications |
 
 ```
 Farscape (parses C headers) → BAREWire.[Target] (quotation descriptors) → FNCS (inspects at compile time) → Alex (generates MLIR)
@@ -65,7 +65,7 @@ Alex responds to these patterns:
 ## What BAREWire Does NOT Do
 
 - Implement platform-specific operations (that's Alex's job)
-- Contain syscall bindings (that's Alloy/Alex)
+- Contain syscall bindings (that's Fidelity.Platform/Alex)
 - Parse C headers (that's Farscape)
 - Generate MLIR/LLVM (that's Alex)
 
@@ -73,10 +73,10 @@ Alex responds to these patterns:
 
 | Project | Relationship |
 |---------|--------------|
-| **Alloy** | BAREWire depends on Alloy for primitive operations |
+| **Fidelity.Platform** | BAREWire depends on Fidelity.Platform for primitive operations |
 | **Farscape** | Farscape generates BAREWire.[Target] modules |
 | **Firefly** | Firefly compiles code using BAREWire types; Alex interprets markers |
 
 ## Canonical Document
 
-See Firefly `/docs/Native_Library_Binding_Architecture.md` for the complete binding architecture.
+See Farscape `/docs/01_Architecture_Overview.md` and Firefly `/docs/Quotation_Based_Memory_Architecture.md` for the binding architecture.

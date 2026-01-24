@@ -16,7 +16,7 @@ to provide as Farscape's foundation. As of this assessment, these types DO NOT E
 - Missing: Hardware-specific descriptors, fixed-address semantics, volatile access primitives
 - Gap: Memory model is dynamic (byte[]), not fixed-address hardware registers
 
-### Implementation Status (December 2024)
+### Implementation Status (December 2025)
 
 Platform cruft has been removed from BAREWire. The remaining structure is:
 - Core types (BARE type system, error handling)
