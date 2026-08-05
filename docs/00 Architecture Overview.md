@@ -1,39 +1,53 @@
 # BAREWire Architecture Overview
 
-BAREWire is designed as a modular system with several core components that work together to provide a comprehensive solution for binary data encoding, memory mapping, and communication.
+BAREWire is designed as a modular system with several core components that work
+together to provide a comprehensive solution for binary data encoding, memory
+mapping, and communication.
 
-> **Architecture Update (December 2024)**: BAREWire participates in the **quotation-based memory architecture** for the Fidelity framework.
-> Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns using BAREWire types.
-> See `~/repos/Firefly/docs/Quotation_Based_Memory_Architecture.md` for the unified four-component architecture.
+> **Read [Substrate_Formalism](./Substrate_Formalism.md) first.** It states what
+> BAREWire is: a formalizable substrate upholding a *typed contract* across a
+> boundary, not a memory layout and not a wire format. The encoding serves the
+> contract, not the other way round. [10 The Case from
+> Practice](./10%20The%20Case%20from%20Practice.md) supplies the evidence from
+> two projects that crossed boundaries without it.
 
-## Project Structure 
+## Project Structure
 
-BAREWire/
-├── Core/
-│   ├── Types.fs           # Core type definitions and measures
-│   ├── Memory.fs          # Memory representation and operations
-│   └── Error.fs           # Error handling types
+Two trees are listed below, because they differ and the difference is the point.
+Documents in this folder specify a system considerably larger than what is
+built; treating them as a description of the repository has caused confusion
+before. See [Implementation Status](./Implementation%20Status.md) for the ledger.
+
+**What exists** (`src/`, and what `BAREWire.fidproj` compiles):
+
+```text
+BAREWire/src/
+├── Hardware/
+│   └── Descriptors.fs     # Peripheral, field, bitfield and StructDescriptor types
 ├── Encoding/
+│   ├── Memory.fs          # Memory representation and operations
 │   ├── Encoder.fs         # Encoding primitives
 │   ├── Decoder.fs         # Decoding primitives
 │   └── Codec.fs           # Combined encoding/decoding operations
-├── Schema/
-│   ├── Definition.fs      # Schema type definitions
-│   ├── Validation.fs      # Schema validation logic
-│   ├── Analysis.fs        # Schema analysis tools
-│   └── DSL.fs             # Domain-specific language for schema definition
-├── Memory/
-│   ├── Region.fs          # Memory region operations
-│   ├── View.fs            # Memory view operations
-│   └── Mapping.fs         # Memory mapping functions
-├── Network/
-│   ├── Frame.fs           # Frame format for binary communication
-│   ├── Transport.fs       # Transport abstractions
-│   └── Protocol.fs        # Message passing primitives
-└── IPC/
-    ├── SharedMemory.fs    # Shared memory regions
-    ├── MessageQueue.fs    # Message queues
-    └── NamedPipe.fs       # Named pipes
+└── Schema/
+    ├── Definition.fs      # Schema type definitions
+    ├── Validation.fs      # Schema validation logic
+    ├── Analysis.fs        # Schema analysis tools
+    └── DSL.fs             # Domain-specific language for schema definition
+```
+
+**What the documents specify** — design only, no implementation:
+
+```text
+├── Memory/                # 04 Memory Mapping — Region, View, address calculation
+├── Network/               # 05 Network Protocol — Frame, Transport, Protocol
+├── IPC/                   # 06/07 IPC — shared memory, queues, pipes
+└── (tier modules)         # BAREWire.HSA / .CXL / .RDMA — the three scales
+```
+
+A `Core/` module is referenced by the orphaned test project and by older
+documents. It does not exist; error and core types moved out during the
+compiler-services migration.
 
 ## Core Components
 

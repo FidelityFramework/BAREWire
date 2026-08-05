@@ -50,7 +50,7 @@ type FieldDescriptor = {
     /// Bit fields within this register (empty for simple fields)
     BitFields: BitFieldDescriptor array
     /// Optional documentation
-    Documentation: string
+    Documentation: string option
 }
 
 /// Layout of a peripheral's register set
@@ -73,6 +73,18 @@ type PeripheralDescriptor = {
     Layout: PeripheralLayout
     /// Memory region this peripheral belongs to
     MemoryRegion: MemoryRegionKind
+}
+
+/// Describes a general-purpose struct with explicit ABI layout.
+/// For non-hardware ABI-critical structs (ioctl args, shared-memory structures, DMA descriptors).
+/// Used by Farscape to validate memory layout contracts across heterogeneous processors.
+type StructDescriptor = {
+    /// Struct name (e.g., "drm_mode_create_dumb")
+    Name: string
+    /// Register/field layout (reuses PeripheralLayout)
+    Layout: PeripheralLayout
+    /// Optional documentation
+    Documentation: string option
 }
 
 /// Volatility classification for memory regions
@@ -131,11 +143,11 @@ module Field =
           Type = ntuKind
           Access = access
           BitFields = Array.zeroCreate 0
-          Documentation = "" }
+          Documentation = None }
 
     /// Create a field with documentation
     let withDoc doc (field: FieldDescriptor) : FieldDescriptor =
-        { field with Documentation = doc }
+        { field with Documentation = Some doc }
 
     /// Create a field with bit fields
     let withBitFields bitFields (field: FieldDescriptor) : FieldDescriptor =
@@ -181,3 +193,9 @@ module Layout =
     /// Create a layout with natural alignment
     let withNaturalAlignment size fields : PeripheralLayout =
         create size 4 fields  // Default 4-byte alignment for ARM
+
+/// Module for constructing struct descriptors
+module StructLayout =
+    /// Create a struct descriptor
+    let create name layout doc : StructDescriptor =
+        { Name = name; Layout = layout; Documentation = doc }

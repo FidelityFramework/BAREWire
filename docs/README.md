@@ -6,6 +6,17 @@ This repository contains comprehensive documentation for the BAREWire project. E
 
 ## Table of Contents
 
+### Start here
+
+- [Substrate_Formalism](./Substrate_Formalism.md) — what BAREWire *is*: a
+  formalizable substrate upholding a typed contract across a boundary, argued
+  from first principles.
+- [10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) — the same
+  position argued from evidence, drawn from two projects that crossed
+  boundaries without it.
+- [Implementation Status](./Implementation%20Status.md) — which of the documents
+  below describe code and which describe design. Most describe design.
+
 ### Core Documentation
 
 1. [Architecture Overview](./00%20Architecture%20Overview.md)
@@ -17,9 +28,12 @@ This repository contains comprehensive documentation for the BAREWire project. E
 7. [IPC Integration](./06%20IPC%20Integration.md)
 8. [IPC Platform Specific APIs](./07%20IPC%20Platform%20Specific%20APIs.md)
 9. [Hardware Descriptors](./08%20Hardware%20Descriptors.md) *(Fidelity Integration)*
+10. [Cache-Aware Layouts](./09%20Cache-Aware%20Layouts.md)
 
-### Reference
+### Design references
 
+- [Arena Design](./Arena_Design.md) — authoritative design; implemented
+  elsewhere as a compiler intrinsic.
 - [Eliminating .NET Dependencies](./99%20Elminating%20Dotnet%20Dependencies.md)
 
 ## Document Structure
@@ -66,7 +80,7 @@ BAREWire provides:
 |---------|------|---------------|
 | **fsnative** | F# Native compiler with phantom type measures | `~/repos/fsnative/docs/fidelity/` |
 | **Farscape** | C/C++ binding generator | `~/repos/Farscape/docs/` |
-| **Firefly** | Native compilation pipeline | `~/repos/Firefly/docs/` |
+| **Composer** | Native compilation pipeline (formerly Firefly) | `~/repos/Composer/docs/` |
 | **Alloy** | Native F# standard library | `~/repos/Alloy/` |
 
 ### Key Integration Documents

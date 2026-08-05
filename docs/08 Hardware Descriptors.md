@@ -10,7 +10,7 @@ BAREWire provides a hardware descriptor system for memory-mapped peripheral acce
 
 > **Architecture Update (December 2024)**: These types participate in the **quotation-based memory architecture**.
 > Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns for PSG recognition.
-> See `~/repos/Firefly/docs/Quotation_Based_Memory_Architecture.md` for details.
+> See `~/repos/Composer/docs/` for details (authored when Composer was named Firefly).
 >
 > Key integration point: The `MemoryModel` record type (pure F#, no interfaces) ties together:
 > - Quotations encoding memory constraints
@@ -46,7 +46,7 @@ Hardware memory descriptors serve as the bridge between C/C++ peripheral definit
 │         │                                                               │
 │         ▼                                                               │
 │  ┌─────────────────┐                                                    │
-│  │  Firefly/Alex   │  Generates volatile MLIR for peripheral access    │
+│  │  Composer/Alex  │  Generates volatile MLIR for peripheral access    │
 │  │   Bindings      │  using descriptor metadata                         │
 │  └─────────────────┘                                                    │
 │         │                                                               │
@@ -398,5 +398,5 @@ BAREWire/
 | Core Types and Measures | `./01 Core Types and Measures.md` |
 | Memory Mapping | `./04 Memory Mapping.md` |
 | Farscape Integration | `~/repos/Farscape/docs/02_BAREWire_Integration.md` |
-| fsnative Specification | `~/repos/fsnative-spec/docs/fidelity/FNCS_Specification.md` |
-| Memory Interlock Requirements | `~/repos/Firefly/docs/Memory_Interlock_Requirements.md` |
+| Native type universe | `~/repos/clef-lang-spec/spec/native-type-universe.md` (supersedes the FNCS specification) |
+| Memory interlock requirements | `~/repos/Composer/docs/` (repository renamed from Firefly) |

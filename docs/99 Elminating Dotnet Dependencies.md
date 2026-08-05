@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-BAREWire is designed as a binary serialization and IPC library for F#, but started with numerous dependencies on .NET Core/BCL. To support the Fidelity Framework's MLIR/LLVM compilation target for native operation (Project "Firefly"), we eliminated these dependencies in favor of direct F# implementations. This memo identifies these dependencies and proposes implementation strategies that would maintain functionality while ensuring compatibility with a native compilation approach.
+BAREWire is designed as a binary serialization and IPC library for F#, but started with numerous dependencies on .NET Core/BCL. To support the Fidelity Framework's MLIR/LLVM compilation target for native operation (the compiler then named "Firefly", now Composer), we eliminated these dependencies in favor of direct F# implementations. This memo identifies these dependencies and proposes implementation strategies that would maintain functionality while ensuring compatibility with a native compilation approach.
 
 ## 2. Initial Dependency Analysis
 

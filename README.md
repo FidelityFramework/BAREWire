@@ -24,12 +24,12 @@ BAREWire implements the [BARE (Binary Application Record Encoding)](https://bare
 
 ## The Fidelity Framework
 
-BAREWire is part of the **Fidelity** native F# compilation ecosystem:
+BAREWire is part of the **Fidelity** native compilation ecosystem:
 
 | Project | Role |
 |---------|------|
-| **[Firefly](https://github.com/speakeztech/firefly)** | AOT compiler: F# → PSG → MLIR → Native binary |
-| **FNCS** | F# Native Compiler Services (intrinsics, native types) |
+| **Composer** | AOT compiler: Clef → PSG → MLIR → native binary (formerly Firefly) |
+| **CCS** | Clef Compiler Services — intrinsics, the Native Type Universe, `NTUKind` (formerly FNCS) |
 | **BAREWire** | Binary encoding, memory mapping, zero-copy IPC |
 | **[Farscape](https://github.com/speakeztech/farscape)** | C/C++ header parsing for native library bindings |
 | **[XParsec](https://github.com/speakeztech/xparsec)** | Parser combinators powering PSG traversal and header parsing |
@@ -42,18 +42,18 @@ BAREWire supports two compilation targets:
 
 | Target | Use Case | Available Modules |
 |--------|----------|-------------------|
-| **Firefly** | Native desktop/embedded applications | All modules |
+| **Native** | Native desktop/embedded applications (Composer) | All modules |
 | **Fable** | WREN stack WebSocket IPC | Encoding modules only |
 
 ### WREN Stack Integration
 
-The [WREN Stack](https://speakez.tech/blog/wren-stack/) (WebView + Reactive + Embedded + Native) uses BAREWire for type-safe communication between the native Firefly backend and the Fable/JavaScript frontend:
+The [WREN Stack](https://speakez.tech/blog/wren-stack/) (WebView + Reactive + Embedded + Native) uses BAREWire for type-safe communication between the native Composer backend and the Fable/JavaScript frontend:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                 WREN Stack Application                   │
 ├────────────────────┬────────────────────────────────────┤
-│  Frontend (Fable)  │      Backend (Firefly)             │
+│  Frontend (Fable)  │      Backend (native)              │
 │  Partas.Solid UI   │      Native Application Logic      │
 ├────────────────────┴────────────────────────────────────┤
 │         WebSocket + BAREWire Binary Protocol            │
@@ -62,12 +62,12 @@ The [WREN Stack](https://speakez.tech/blog/wren-stack/) (WebView + Reactive + Em
 
 ### Module Availability by Target
 
-**Dual-Target (Firefly + Fable):**
+**Dual-Target (native + Fable):**
 - `BAREWire.Core.Buffer` - Sequential write buffer
 - `BAREWire.Core.Binary` - Byte conversion utilities
 - `BAREWire.Encoding.*` - BARE encoding/decoding
 
-**Firefly-Only:**
+**Native-Only:**
 - `BAREWire.Core.Memory<'T,'region>` - Capability-based memory
 - `BAREWire.Memory.*` - Region, View, SafeMemory
 - `BAREWire.Core.Capability` - Lifetime markers
@@ -192,7 +192,7 @@ type FieldDescriptor = {
 }
 ```
 
-Farscape generates these descriptors from C/C++ headers (like CMSIS HAL), and Firefly's Alex component uses them to emit correct memory-mapped access code with proper volatile semantics.
+Farscape generates these descriptors from C/C++ headers (like CMSIS HAL), and Composer's Alex component uses them to emit correct memory-mapped access code with proper volatile semantics.
 
 ## Schema Compatibility
 
@@ -218,19 +218,19 @@ match checkCompatibility oldSchema newSchema with
 src/
 ├── Core/           # Fundamental types and operations
 │   ├── Binary.fs   # Binary conversion (Dual-target ✓)
-│   ├── Memory.fs   # Buffer (Dual-target ✓) + Memory<'T,'region> (Firefly)
+│   ├── Memory.fs   # Buffer (Dual-target ✓) + Memory<'T,'region> (native)
 │   ├── Types.fs    # Core type definitions and measures
 │   ├── Utf8.fs     # UTF-8 encoding/decoding (Dual-target ✓)
-│   └── Capability.fs # Lifetime markers (Firefly only)
+│   └── Capability.fs # Lifetime markers (native only)
 ├── Encoding/       # BARE protocol implementation (Dual-target ✓)
 │   ├── Codec.fs    # Combined encode/decode
 │   ├── Decoder.fs  # Decoding primitives
 │   └── Encoder.fs  # Encoding primitives
-├── Memory/         # Memory mapping and views (Firefly only)
+├── Memory/         # Memory mapping and views (native only)
 │   ├── Region.fs   # Memory region operations
 │   ├── View.fs     # Typed field access
 │   └── Mapping.fs  # Memory mapping functions
-├── IPC/            # Inter-process communication (Firefly only)
+├── IPC/            # Inter-process communication (native only)
 │   ├── SharedMemory.fs  # Shared memory regions
 │   ├── MessageQueue.fs  # Message queues
 │   └── NamedPipe.fs     # Named pipes
@@ -245,7 +245,7 @@ src/
     └── Analysis.fs   # Compatibility checking
 ```
 
-**Legend:** Modules marked "(Dual-target ✓)" work on both Firefly and Fable. All others are Firefly-only.
+**Legend:** Modules marked "(Dual-target ✓)" work on both the native and Fable targets. All others are native-only.
 
 ## Performance
 
@@ -263,7 +263,7 @@ For .NET projects:
 dotnet add package BAREWire
 ```
 
-For Fidelity/Firefly projects, BAREWire is included as source files via the project configuration.
+For Fidelity/Composer projects, BAREWire is included as source files via the project configuration.
 
 ## Development Status
 
@@ -298,4 +298,4 @@ Contributions are welcome! By submitting a pull request, you agree to license yo
 
 - **[BARE Protocol](https://baremessages.org/)**: The binary encoding specification
 - **[FSharp.UMX](https://github.com/fsprojects/FSharp.UMX)**: Phantom types for units of measure
-- **Firefly Team**: For the native compilation infrastructure
+- **Composer Team**: For the native compilation infrastructure

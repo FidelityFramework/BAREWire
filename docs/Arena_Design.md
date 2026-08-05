@@ -1,8 +1,8 @@
 # Arena Design: Deterministic Memory for Non-Actor Scenarios
 
-> **Status (January 2026)**: Arena is fully implemented as an FNCS intrinsic type and compiles to working native code. Sample 02 (HelloWorldSaturated) demonstrates the complete Arena lifecycle from stack-backed memory through readlnFrom and string output.
+> **Status (January 2026)**: Arena is fully implemented as a compiler-services (CCS, formerly FNCS) intrinsic type and compiles to working native code. Sample 02 (HelloWorldSaturated) demonstrates the complete Arena lifecycle from stack-backed memory through readlnFrom and string output.
 >
-> **Implementation Note**: Arena was originally designed here in BAREWire but has been elevated to an FNCS intrinsic type (`Arena<[<Measure>] 'lifetime>`) with compiler-provided operations. This document remains the authoritative design reference.
+> **Implementation Note**: Arena was originally designed here in BAREWire but has been elevated to a compiler-services intrinsic type (`Arena<[<Measure>] 'lifetime>`) with compiler-provided operations. This document remains the authoritative design reference.
 
 ## The Problem
 
@@ -195,9 +195,9 @@ The current simple design is the foundation these build upon.
 
 ## Implementation Status (January 2026)
 
-Arena is implemented as an **FNCS intrinsic type**:
+Arena is implemented as a **compiler-services intrinsic type**:
 
-**Type Definition** (in FNCS NativeGlobals.fs):
+**Type Definition** (in compiler services, `NativeGlobals.fs`):
 ```fsharp
 /// Arena type: Arena<'lifetime>
 /// Layout: { Base: nativeint, Capacity: int, Position: int } = 3 platform words
@@ -207,7 +207,7 @@ let arenaTyCon =
         (TypeLayout.NTUCompound 3)
 ```
 
-**Operations** (in FNCS Intrinsics.fs):
+**Operations** (in compiler services, `Intrinsics.fs`):
 
 | Operation | Type | Description |
 |-----------|------|-------------|
@@ -217,10 +217,10 @@ let arenaTyCon =
 | `remaining` | `Arena<'lifetime> -> int` | Query remaining capacity |
 | `reset` | `Arena<'lifetime> byref -> unit` | Reset position to 0 |
 
-**Alex Code Generation** (in Firefly):
+**Alex Code Generation** (in Composer):
 - Arena is recognized as a compiler-provided intrinsic
 - MLIR generation uses struct operations (InsertValue/ExtractValue)
 - Templates handle GEP for bump allocation
 - Proper handling of byref parameters for mutation
 
-See the Firefly Serena memory `arena_intrinsic_architecture` for full implementation details.
+See the Composer Serena memory `arena_intrinsic_architecture` for full implementation details.
