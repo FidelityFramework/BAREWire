@@ -554,13 +554,11 @@ module Rpc =
         serverLoop ()
 ```
 
-## Integration with FSharp.UMX
+## Integration with Measures
 
-BAREWire integrates with FSharp.UMX for type-safe network communication:
+BAREWire uses dimensional measures for type-safe network communication:
 
 ```fsharp
-open FSharp.UMX
-
 /// Define message-specific units of measure
 [<Measure>] type userId
 [<Measure>] type authToken
@@ -601,11 +599,13 @@ module TypeSafeProtocol =
         | Transport.SendResult.Failure error ->
             Error $"Failed to send login request: {error}"
     
-    /// Create a login response with type safety
-    let createLoginResponse (token: string) (sessionId: Guid): LoginResponse =
+    /// Responses are constructed measured at the origin: the values that
+    /// enter the protocol already carry their dimensions, and a token can
+    /// never be passed where a session id is expected
+    let createLoginResponse (token: string<authToken>) (sessionId: Guid<sessionId>): LoginResponse =
         {
-            Token = UMX.tag<authToken> token
-            SessionId = UMX.tag<sessionId> sessionId
+            Token = token
+            SessionId = sessionId
         }
 ```
 

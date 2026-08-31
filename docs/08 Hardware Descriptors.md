@@ -8,14 +8,12 @@ BAREWire provides a hardware descriptor system for memory-mapped peripheral acce
 >
 > The types defined in this document are the design specification for BAREWire's hardware descriptor system. Implementation is required before Farscape can generate complete peripheral bindings.
 
-> **Architecture Update (December 2024)**: These types participate in the **quotation-based memory architecture**.
-> Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns for PSG recognition.
-> See `~/repos/Composer/docs/` for details (authored when Composer was named Firefly).
+> These types participate in the **quotation-based memory architecture**: Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns for PSG recognition (see `~/repos/Composer/docs/`).
 >
-> Key integration point: The `MemoryModel` record type (pure F#, no interfaces) ties together:
+> Key integration point: the `MemoryModel` record type ties together:
 > - Quotations encoding memory constraints
 > - Active patterns for PSG node recognition
-> - Integration surface for fsnative nanopass pipeline
+> - Integration surface for the Composer nanopass pipeline
 
 ## Overview
 
@@ -279,9 +277,9 @@ Alex uses `MemoryRegionKind` to determine:
 - Memory barrier requirements
 - Valid access widths
 
-## Integration with fsnative
+## Integration with the native type universe
 
-Hardware descriptors work in conjunction with fsnative's phantom type measures:
+Hardware descriptors work in conjunction with the NTU's measure types — pin and layout metadata ride on the type constructors themselves (e.g. `FieldPinAttributes`; see `~/repos/clef-lang-spec/spec/native-type-universe.md`):
 
 ```fsharp
 // fsnative provides these measure types
@@ -368,7 +366,7 @@ Key difference: Hardware regions have **fixed addresses** determined at compile 
 
 ## Future: Unified Memory Description
 
-The hardware descriptor system will eventually unify with BAREWire's IPC/serialization memory descriptions:
+The hardware descriptor system unifies with BAREWire's IPC/serialization memory descriptions — the peripheral descriptor's pattern (declared layout, fixed extents, access constraints) generalizes to the process's own memory map, buffer schemas, and boundary contracts for every processor (see [11 Platform Description](./11%20Platform%20Description.md)):
 
 - **Hardware peripherals**: Fixed addresses, volatile, hardware-constrained
 - **Shared memory IPC**: Dynamic addresses, potentially volatile
@@ -378,18 +376,18 @@ All use the same underlying memory layout primitives with different allocation a
 
 ## Implementation Location
 
-Hardware descriptor types should be implemented in:
+Hardware descriptor types live in:
 
 ```
 BAREWire/
 └── src/
-    └── Core/
-        └── Hardware/
-            ├── Types.fs        # PeripheralDescriptor, FieldDescriptor, etc.
-            ├── AccessKind.fs   # ReadOnly, WriteOnly, ReadWrite
-            ├── RegionKind.fs   # Flash, SRAM, Peripheral, etc.
-            └── BitField.fs     # BitFieldDescriptor for sub-register access
+    └── Hardware/
+        └── Descriptors.fs   # PeripheralDescriptor, FieldDescriptor,
+                             # AccessKind, MemoryRegionKind, BitFieldDescriptor,
+                             # StructDescriptor
 ```
+
+
 
 ## Related Documentation
 

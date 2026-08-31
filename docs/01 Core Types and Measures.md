@@ -1,6 +1,6 @@
 # Core Types and Measures
 
-BAREWire uses F#'s powerful type system, particularly units of measure, to provide compile-time guarantees about the correctness of binary data. This document describes the foundational types used throughout the library.
+BAREWire's compile-time guarantees rest on the **native type universe (NTU)** of Clef's compiler services: a native ML-family type system in which Andrew Kennedy's units-of-measure frame is the type system's own dimensional structure. Dimensions are solved by abelian-group unification over ℤ as an extension of Hindley–Milner inference, and they persist as native metadata through MLIR lowering rather than erasing at compile time (see `~/repos/clef-lang-spec/spec/native-type-universe.md` and the DTS+DMM paper). Measures are native dimensional structure the compiler carries with the value. This document describes the foundational types used throughout the library.
 
 ## Units of Measure
 

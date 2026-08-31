@@ -3,6 +3,8 @@
 > **Status (January 2026)**: Arena is fully implemented as a compiler-services (CCS, formerly FNCS) intrinsic type and compiles to working native code. Sample 02 (HelloWorldSaturated) demonstrates the complete Arena lifecycle from stack-backed memory through readlnFrom and string output.
 >
 > **Implementation Note**: Arena was originally designed here in BAREWire but has been elevated to a compiler-services intrinsic type (`Arena<[<Measure>] 'lifetime>`) with compiler-provided operations. This document remains the authoritative design reference.
+>
+> **Proof linkage**: the allocation discipline specified here — position, capacity, bump, span — is what the Tier 2 arena-allocation-bound obligations are stated against; the discipline must be graph-resident to carry proofs. See [11 Platform Description](./11%20Platform%20Description.md).
 
 ## The Problem
 

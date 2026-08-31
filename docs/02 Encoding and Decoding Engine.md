@@ -1,13 +1,13 @@
 # Encoding and Decoding Engine
 
-The heart of BAREWire is its encoding and decoding engine, which handles the conversion between F# values and their binary BARE representation. This document explains the core encoding and decoding functions and how they work together.
+The heart of BAREWire is its encoding and decoding engine, which handles the conversion between native Clef values and their binary BARE representation. This document explains the core encoding and decoding functions and how they work together.
 
 ## Design Philosophy
 
 The encoding/decoding engine is designed with these principles in mind:
 
 1. **Zero allocations** where possible
-2. **Type safety** through F#'s type system
+2. **Type safety** through the native type universe
 3. **Composability** of encoding/decoding functions
 4. **Performance** through careful optimization
 
@@ -39,7 +39,9 @@ module Encoder =
     /// Write a string value
     let writeString (buffer: Buffer<'T>) (value: string): unit =
         // Get UTF-8 bytes
-        let bytes = System.Text.Encoding.UTF8.GetBytes(value)
+        // A Clef string IS a length-carried memref of UTF-8 bytes: no
+        // conversion exists — toBytes is an identity view of the same memory
+        let bytes = String.toBytes value
         // Write length as uint
         writeUInt buffer (uint64 bytes.Length)
         // Write bytes
@@ -63,7 +65,7 @@ module Encoder =
 
 ## Primitive Decoding
 
-Decoding is the inverse of encoding, reading binary data and converting it to F# values:
+Decoding is the inverse of encoding, reading binary data and converting it to native values:
 
 ```fsharp
 /// Decoding functions for primitive types
@@ -108,7 +110,7 @@ module Decoder =
         
         // Read bytes
         let bytes = memory.Data.[int currentOffset .. int currentOffset + int length - 1]
-        let str = System.Text.Encoding.UTF8.GetString(bytes)
+        let str = String.fromBytes bytes  // identity: both are memref<?xi8>
         
         str, currentOffset + (int length * 1<offset>)
     
@@ -428,32 +430,24 @@ module Schema =
         unbox<'T> value, finalOffset
 ```
 
-## Type Safety with FSharp.UMX
+## Type Safety through Measures
 
-BAREWire integrates with FSharp.UMX to provide additional type safety:
+Measures are structure of the native type universe, so they flow through encoding and decoding with no wrapping layer: a value of type `'T<'m>` encodes as its representation `'T`, and the measure is compile-time dimensional structure the compiler carries — nothing is tagged or untagged, at runtime or in source.
 
 ```fsharp
-// Import UMX (assuming proper module path)
-open FSharp.UMX
+/// Encoding and decoding are measure-transparent: the schema speaks to the
+/// representation, the NTU carries the dimension. Passing a value with the
+/// wrong measure is a compile error at the call site.
+let encodeMeasured<'T, [<Measure>] 'm>
+                   (schema: SchemaDefinition<validated>)
+                   (value: 'T<'m>)
+                   (buffer: Buffer<'a>): unit =
+    Schema.encode schema value buffer
 
-/// Encode a value with UMX type safety
-let encodeWithMeasure<'T, [<Measure>] 'm> 
-                      (schema: SchemaDefinition<validated>) 
-                      (value: 'T<'m>) 
-                      (buffer: Buffer<'a>): unit =
-    // Unwrap the measure
-    let rawValue = UMX.untag value
-    // Encode the raw value
-    Schema.encode schema rawValue buffer
-
-/// Decode a value with UMX type safety
-let decodeWithMeasure<'T, [<Measure>] 'm> 
-                      (schema: SchemaDefinition<validated>) 
-                      (memory: Memory<'a, 'region>): 'T<'m> * int<offset> =
-    // Decode the raw value
-    let rawValue, offset = Schema.decode<'T> schema memory
-    // Wrap with the measure
-    UMX.tag<'m> rawValue, offset
+let decodeMeasured<'T, [<Measure>] 'm>
+                   (schema: SchemaDefinition<validated>)
+                   (memory: Memory<'a, 'region>): 'T<'m> * int<offset> =
+    Schema.decode<'T<'m>> schema memory
 ```
 
 ## Zero-Copy Decoding
@@ -479,4 +473,4 @@ module ZeroCopy =
         failwith "Not implemented"
 ```
 
-These encoding and decoding engines form the core of BAREWire's functionality, enabling efficient and type-safe binary data processing. The design emphasizes performance, minimal allocations, and seamless integration with F#'s type system.
+These encoding and decoding engines form the core of BAREWire's functionality, enabling efficient and type-safe binary data processing. The design emphasizes performance, minimal allocations, and seamless integration with the native type universe.

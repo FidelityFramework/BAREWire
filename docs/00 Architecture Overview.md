@@ -70,7 +70,7 @@ flowchart TB
     Core --> Features
     
     subgraph Integration["Integration Points"]
-        UMX["FSharp.UMX<br>Type Safety"]
+        NTU["Native Type Universe<br>Dimensional Measures"]
         Farscape["Farscape<br>C/C++ Bindings"]
         Fidelity["Fidelity Framework"]
         XParsec["XParsec<br>Schema Parsing"]
@@ -85,15 +85,15 @@ flowchart TB
 
 ## Design Principles
 
-1. **Zero Dependencies**: BAREWire is implemented in pure F# with no external dependencies, making it suitable for use in constrained environments.
+1. **Zero Dependencies**: BAREWire is implemented with no external dependencies, making it suitable for constrained environments.
 
-2. **Type Safety**: The library leverages F#'s type system, particularly through integration with FSharp.UMX, to provide compile-time type safety for serialized data.
+2. **Type Safety**: compile-time safety through the native type universe's dimensional measures — offset, byte, count, and region distinctions carried in the types themselves (see [01 Core Types and Measures](./01%20Core%20Types%20and%20Measures.md)).
 
 3. **Performance First**: All operations are optimized for high performance with minimal allocations and efficient memory usage.
 
 4. **Composability**: Components are designed to be composable, allowing developers to use only the parts they need.
 
-5. **Cross-Platform Compatibility**: The library is designed to work across .NET, Fable, and the Fidelity Framework.
+5. **Boundary Reach**: the substrate discipline extends wherever a TCB can be articulated — native targets through the Fidelity Framework, and the type-erasure boundary of the JavaScript/WREN path ([Substrate_Formalism](./Substrate_Formalism.md), §"two boundaries").
 
 ## Layered Architecture
 

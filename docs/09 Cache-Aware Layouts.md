@@ -327,7 +327,7 @@ BAREWire layout information feeds into the verification workflow:
 4. **Analysis**: Events correlated with layout metadata
 5. **Report**: Confirms or refutes compile-time predictions
 
-See `~/repos/Composer/docs/` for the verification workflow (the document was authored when Composer was named Firefly).
+See `~/repos/Composer/docs/` for the verification workflow.
 
 ## Examples
 

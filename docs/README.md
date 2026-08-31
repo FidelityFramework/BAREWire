@@ -11,6 +11,7 @@ This repository contains comprehensive documentation for the BAREWire project. E
 - [Substrate_Formalism](./Substrate_Formalism.md) — what BAREWire *is*: a
   formalizable substrate upholding a typed contract across a boundary, argued
   from first principles.
+- [11 Platform Description](./11%20Platform%20Description.md) — the same substrate read *inward*: BAREWire as the declared authority on memory layout for every processor, generalized from what the FPGA path (HelloArty, the Fidelity.Platform FPGA articulation) was forced to build.
 - [10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) — the same
   position argued from evidence, drawn from two projects that crossed
   boundaries without it.
@@ -29,6 +30,8 @@ This repository contains comprehensive documentation for the BAREWire project. E
 8. [IPC Platform Specific APIs](./07%20IPC%20Platform%20Specific%20APIs.md)
 9. [Hardware Descriptors](./08%20Hardware%20Descriptors.md) *(Fidelity Integration)*
 10. [Cache-Aware Layouts](./09%20Cache-Aware%20Layouts.md)
+11. [The Case from Practice](./10%20The%20Case%20from%20Practice.md)
+12. [Platform Description](./11%20Platform%20Description.md)
 
 ### Design references
 
@@ -52,18 +55,19 @@ The documentation is organized in a sequential manner, beginning with a high-lev
 
 ## Fidelity Framework Integration
 
-BAREWire is a core component of the Fidelity native F# compilation ecosystem:
+BAREWire is a core component of the Fidelity framework's native compilation
+ecosystem for the Clef language:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         Fidelity Ecosystem                              │
 │                                                                         │
-│  fsnative ──provides types──▶ Farscape ──uses──▶ BAREWire              │
-│     │                            │                   │                  │
-│     ▼                            ▼                   ▼                  │
-│  Ptr<'T,                    Parses C/C++       PeripheralDescriptor    │
-│  peripheral,                headers            FieldDescriptor          │
-│  readWrite>                                    AccessKind               │
+│  Clef/CCS ──native type universe──▶ Farscape ──uses──▶ BAREWire        │
+│     │                                  │                   │            │
+│     ▼                                  ▼                   ▼            │
+│  NTU types with                 Parses C/C++        PeripheralDescriptor│
+│  dimensional and                headers via clang   FieldDescriptor     │
+│  pin/layout metadata            (real ABI)          AccessKind          │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -73,20 +77,16 @@ BAREWire provides:
 1. **Memory Descriptors**: Type definitions for hardware memory mapping (see [Hardware Descriptors](./08%20Hardware%20Descriptors.md))
 2. **Zero-Copy IPC**: Efficient inter-process communication without data copying
 3. **Schema System**: Wire format definitions for serialization
+4. **Platform Description** *(direction)*: the declared authority on memory layout, boundary contracts, and transports for every processor — see [11 Platform Description](./11%20Platform%20Description.md)
 
 ### Related Projects
 
 | Project | Role | Documentation |
 |---------|------|---------------|
-| **fsnative** | F# Native compiler with phantom type measures | `~/repos/fsnative/docs/fidelity/` |
-| **Farscape** | C/C++ binding generator | `~/repos/Farscape/docs/` |
+| **Clef / CCS** | The language and its compiler services; the native type universe | `~/repos/clef`, `~/repos/clef-lang-spec` |
 | **Composer** | Native compilation pipeline (formerly Firefly) | `~/repos/Composer/docs/` |
-| **Alloy** | Native F# standard library | `~/repos/Alloy/` |
-
-### Key Integration Documents
-
-- [Memory Interlock Requirements](https://github.com/speakeztech/firefly/docs/Memory_Interlock_Requirements.md) - Dependency chain between fsnative, Farscape, and BAREWire
-- [Staged Memory Model](https://github.com/speakeztech/firefly/docs/Staged_Memory_Model.md) - Fidelity's approach to deterministic memory management
+| **Farscape** | C/C++ binding generator (clang-based) | `~/repos/Farscape/docs/` |
+| **Fidelity.Platform** | Per-target platform source trees (CPU, FPGA) | `~/repos/Fidelity.Platform/` |
 
 ## Getting Started
 

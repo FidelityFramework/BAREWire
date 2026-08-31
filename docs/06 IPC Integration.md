@@ -430,7 +430,7 @@ module OlivierIpc =
         
         // Create the actor
         let actorId = {
-            ProcessId = System.Diagnostics.Process.GetCurrentProcess().Id
+            ProcessId = Sys.getpid ()
             Name = name
         }
         
@@ -665,7 +665,7 @@ module ProsperoIpc =
         let nodeId = {
             Type = nodeType
             Name = nodeName
-            Host = System.Net.Dns.GetHostName()
+            Host = Sys.gethostname ()
         }
         
         // Create the communication channel

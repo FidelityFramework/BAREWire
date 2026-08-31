@@ -228,49 +228,31 @@ module FarscapeIntegration =
         | _ -> failwith $"Unsupported C type: {cType}"
 ```
 
-## FSharp.UMX Integration
+## Measure Integration
 
-BAREWire integrates with FSharp.UMX to provide additional type safety for memory mapping:
+Measures are native to the type universe, so type safety for memory mapping needs no integration layer: measured field types are declared once, on the record and in the schema, and the view API flows them. There is no tagging ceremony because there is nothing to tag — the dimension is part of the type.
 
 ```fsharp
-open FSharp.UMX
-
-/// Define units of measure for specific memory regions
+/// Units of measure for specific memory regions
 [<Measure>] type structRegion
 [<Measure>] type headerRegion
 [<Measure>] type dataRegion
 
-/// Define units of measure for field types
+/// Units of measure for field types
 [<Measure>] type userId
 [<Measure>] type timestamp
 [<Measure>] type messageId
 
-/// Memory view with UMX integration
-module UMXMemoryView =
-    /// Get a field with UMX type safety
-    let getField<'T, 'Field, [<Measure>] 'region, [<Measure>] 'measure> 
-                (view: MemoryView.View<'T, 'region>) 
-                (fieldPath: string list): 'Field<'measure> =
-        // Get the raw field value
-        let rawValue = MemoryView.getField<'T, 'Field, 'region> view fieldPath
-        
-        // Apply the measure
-        UMX.tag<'measure> rawValue
-    
-    /// Set a field with UMX type safety
-    let setField<'T, 'Field, [<Measure>] 'region, [<Measure>] 'measure> 
-                (view: MemoryView.View<'T, 'region>) 
-                (fieldPath: string list) 
-                (value: 'Field<'measure>): unit =
-        // Remove the measure
-        let rawValue = UMX.untag value
-        
-        // Set the raw field value
-        MemoryView.setField<'T, 'Field, 'region> view fieldPath rawValue
+/// The record declares its measures; every access site inherits them
+type MessageHeader = {
+    Id: string<messageId>
+    UserId: string<userId>
+    Timestamp: int64<timestamp>
+}
 
-/// Example usage with UMX
-let exampleWithUMX () =
-    // Define a schema for a message header
+let example () =
+    // Define a schema for the message header (field representations; the
+    // measures ride on the record's types)
     let headerSchema =
         schema "MessageHeader"
         |> withType "MessageHeader" (struct' [
@@ -282,35 +264,27 @@ let exampleWithUMX () =
         |> function
            | Ok schema -> schema
            | Error errors -> failwith $"Invalid schema: {errors}"
-    
-    // Create a memory region
+
+    // Create a memory region and a typed view over it
     let headerData = Array.zeroCreate 128
     let headerRegion = MemoryRegion.fromArray<MessageHeader> headerData headerSchema
-    
-    // Create a memory view
     let headerView = MemoryView.create headerRegion
-    
-    // Set fields with type safety
-    UMXMemoryView.setField<MessageHeader, string, headerRegion, messageId>
-        headerView ["id"] (UMX.tag<messageId> "msg-123")
-        
-    UMXMemoryView.setField<MessageHeader, string, headerRegion, userId>
-        headerView ["userId"] (UMX.tag<userId> "user-456")
-        
-    UMXMemoryView.setField<MessageHeader, int64, headerRegion, timestamp>
-        headerView ["timestamp"] (UMX.tag<timestamp> 1631234567L)
-    
-    // Get fields with type safety
-    let id = UMXMemoryView.getField<MessageHeader, string, headerRegion, messageId>
-                headerView ["id"]
-                
-    let user = UMXMemoryView.getField<MessageHeader, string, headerRegion, userId>
-                headerView ["userId"]
-                
-    let time = UMXMemoryView.getField<MessageHeader, int64, headerRegion, timestamp>
-                headerView ["timestamp"]
-    
-    printfn "Message %s from user %s at time %d" (UMX.untag id) (UMX.untag user) (UMX.untag time)
+
+    // Set fields: literals adopt the measured field types; a value carrying
+    // the wrong measure is a compile error at the call site
+    MemoryView.setField headerView ["id"] "msg-123"
+    MemoryView.setField headerView ["userId"] "user-456"
+    MemoryView.setField headerView ["timestamp"] 1631234567L<timestamp>
+
+    // Get fields: the measures come back with the values
+    let id: string<messageId> = MemoryView.getField headerView ["id"]
+    let user: string<userId> = MemoryView.getField headerView ["userId"]
+    let time: int64<timestamp> = MemoryView.getField headerView ["timestamp"]
+
+    // MemoryView.setField headerView ["id"] user
+    //   ^ does not compile: string<userId> is not string<messageId>
+
+    printfn "Message %s from user %s at time %d" id user time
 ```
 
 ## Shared Memory for IPC

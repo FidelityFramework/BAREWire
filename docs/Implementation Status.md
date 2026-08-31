@@ -12,6 +12,7 @@ Assessed 2026-08-04 against `src/` and `src/BAREWire.fidproj`.
 | Area | Document | State |
 |---|---|---|
 | Substrate reading | [Substrate_Formalism](./Substrate_Formalism.md) | Position. Current and load-bearing. |
+| Platform description | [11 Platform Description](./11%20Platform%20Description.md) | Position. Current (2026-08-31): the inward reading — declared layout authority for all processors, generalized from the FPGA path. Direction, not code. |
 | Evidence for the role | [10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) | Position. Current. |
 | Encoding | [02 Encoding and Decoding Engine](./02%20Encoding%20and%20Decoding%20Engine.md) | **Source exists** — `Encoding/{Memory,Encoder,Decoder,Codec}.fs`. Unbuilt (see below). |
 | Schema | [03 Schema System](./03%20Schema%20System.md) | **Source exists** — `Schema/{Definition,Validation,Analysis,DSL}.fs`. Unbuilt. |
@@ -42,11 +43,7 @@ support and notes the resolution is probably the same. **A schema cannot mean
 anything across a boundary until this closes**, and no amount of implementation
 substitutes for closing it.
 
-**3. Its safety mechanism is downstream of measures.** The README's claim is
-compile-time memory safety via units of measure, carried today by `FSharp.UMX`
-phantom types. Whether that survives to the native path is exactly what the
-units-of-measure work has to establish. BAREWire is downstream of that result,
-not parallel to it.
+**3. Its safety mechanism is downstream of measures — resolved at the type-theoretic level, open at the source level.** The README's claim is compile-time memory safety via units of measure, and the sources still carry it as `FSharp.UMX` phantom types. The type-theoretic question is settled: there is no UMX library and no UMX-extended on the native path — the measure discipline is wholly the native type universe's dimensional structure (Kennedy's frame as the type system itself; `clef-lang-spec/spec/native-type-universe.md`, `ntu-dimensional-architecture.md`). What remains is migrating the sources off UMX idioms onto NTU measures, which folds into the Clef migration of blocker 1. BAREWire rides the NTU; it no longer waits on a survival question.
 
 **4. The test suite is orphaned.** `tests/BAREWire.Tests.fsproj` references
 `..\src\BAREWire.fsproj`, which does not exist — only `BAREWire.fidproj` does —
