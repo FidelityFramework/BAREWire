@@ -2,7 +2,12 @@
 
 ## Overview
 
-This repository contains comprehensive documentation for the BAREWire project. Each document covers a specific aspect of the system architecture and implementation.
+This folder documents BAREWire: the typed contract between Clef components, and the declared authority on memory layout for every processor a program runs on. Two missions, ranked ([Substrate_Formalism](./Substrate_Formalism.md), "The two missions"):
+
+- **Primary.** A value crossing a BAREWire boundary between Clef components preserves its case structure, payload types, and dimensional annotations by construction; read inward, the same vocabulary declares each platform's memory spaces, buffer schemas, boundary surfaces, and transports for the compiler's three observers ([11](./11%20Platform%20Description.md)).
+- **Secondary.** The same contract binds to JavaScript, .NET, Rust, C, and C++: source-shared where one protocol file compiles under Fable, .NET, and Composer, schema-shared where a BARE schema is the interchange artifact.
+
+The documents specify the system; [Implementation Status](./Implementation%20Status.md) says which parts are built; [Readiness Audit](./Readiness%20Audit.md) is the build plan; [12 Intersection Subset](./12%20Intersection%20Subset.md) is the compiler-facing rulebook the shared source follows and the gates that enforce it.
 
 ## Table of Contents
 
@@ -16,7 +21,12 @@ This repository contains comprehensive documentation for the BAREWire project. E
   position argued from evidence, drawn from two projects that crossed
   boundaries without it.
 - [Implementation Status](./Implementation%20Status.md) — which of the documents
-  below describe code and which describe design. Most describe design.
+  below describe code and which describe design.
+- [Readiness Audit](./Readiness%20Audit.md) — the mission, the gaps in the
+  applications, and the build order (2026-09-03).
+- [12 Intersection Subset](./12%20Intersection%20Subset.md) — the rules one
+  source follows to compile under Fable, .NET, and Composer, with evidence and
+  the gates.
 
 ### Core Documentation
 
@@ -32,6 +42,7 @@ This repository contains comprehensive documentation for the BAREWire project. E
 10. [Cache-Aware Layouts](./09%20Cache-Aware%20Layouts.md)
 11. [The Case from Practice](./10%20The%20Case%20from%20Practice.md)
 12. [Platform Description](./11%20Platform%20Description.md)
+13. [Intersection Subset](./12%20Intersection%20Subset.md)
 
 ### Design references
 

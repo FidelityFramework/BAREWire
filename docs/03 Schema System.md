@@ -2,6 +2,33 @@
 
 The schema system is a central component of BAREWire, providing the mechanism to define, validate, and use structured data formats. This document explains how BAREWire's schema system works and how to use it effectively.
 
+> **Built vocabulary (2026-09-03).** The schema speaks BARE's own fixed type vocabulary, not the compiler's `NTUKind`: `PrimKind` is a string tag (`"uint"`, `"u8"`, `"str"`, `"data"`, ...), aggregates are `Optional`, `List`, `FixedList`, `Map`, `Union`, `Struct`, `TypeRef`, and every collection is an array (`src/Schema/Definition.fs`). This is what a contract at a boundary needs: **Fixed** dimensions, concrete widths both sides read the same way, rather than dimensions each side resolves for itself ([10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) §"What this implies", point 2; `clef-lang-spec` §7.3). The mapping from a Clef type to this vocabulary is the compiler's job, the `[<BAREWireSchema>]` consumer of Readiness Audit §4 step 8, not the library's. Validation returns an array of `{ Kind; Location }` errors, empty when valid, rather than a `Result` (docs/12). The samples below keep the earlier `Map`-based shapes for the design they illustrate; the built API is in `src/Schema/`.
+
+## The two contract modes and the interchange artifact
+
+A schema has two jobs, and the Readiness Audit ranks them.
+
+**Source-shared.** One protocol file, compiled by Fable, .NET, and Composer from the same source, is the contract: the types themselves. The codec for each type is a pair of module functions in the Encoding tier's shapes (`write: byte array -> int -> 'a -> int`, `read: byte array -> int -> 'a * int`), written beside the consumer today (WrenHello `Codec.fs`, Conclave `Codecs.fs`) and generated from the type by the compiler later. The schema *value* is derived from the type when a program needs it, for the epoch handshake and for compatibility checks. This mode is designed first and firmest.
+
+**Schema-shared.** Where source cannot be shared, the `.bare` schema text is the interchange artifact. `Emit.schema` (`src/Schema/Emit.fs`) writes a `SchemaDefinition` in the BARE schema language, deterministically, in declaration order:
+
+```text
+type Message struct {
+  id: str
+  sender: str
+  timestamp: int
+  attachment: optional<data>
+  type: MessageType
+}
+type MessageType enum { TEXT = 0 IMAGE = 1 VIDEO = 2 FILE = 3 }
+```
+
+Each language's codec is generated from that text by its own generator (the BARE ecosystem has them for Go, Rust, C, JavaScript, and others), and the frames it produces are byte-identical to the source-shared codec's for the same values, because both follow the one wire format of [02](./02%20Encoding%20and%20Decoding%20Engine.md) and the one envelope of [05](./05%20Network%20Protocol.md). The schema-shared mode therefore degrades to the same bytes; a golden-frame corpus (`tests/EncodingTests.fs`) is the check that it does.
+
+A second serialization in this mode is BTF, the BPF Type Format the Linux kernel reads for map definitions and relocation. Where `.bare` text carries the packed wire vocabulary, BTF carries C natural layout with member offsets in bits, which is what `Hardware.Validator.derive` computes; `Hardware/Btf.fs` writes the type and string tables from `StructDescriptor` arrays and reads them back (docs/11 §"The kernel as a described platform").
+
+Not yet built in this mode: a parser from `.bare` text back to `SchemaDefinition`, and a generator that writes the Clef-side per-type module functions from a schema (Readiness Audit §4 step 14).
+
 ## Schema Definition
 
 BAREWire schemas define the structure of binary data using a type-safe approach:

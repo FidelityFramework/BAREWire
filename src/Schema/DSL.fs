@@ -1,139 +1,94 @@
 namespace BAREWire.Schema
 
-open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
+/// The fluent schema surface of docs/03 "Schema DSL": open the module and
+/// write `schema "Message" |> withType "UserId" string |> ...`. Thin over
+/// `Schema`, `Bare`, and `Validation`. Opening it shadows the `int`,
+/// `string`, `bool`, and `uint` conversions with the BARE types of those
+/// names; use `Bare` qualified where the conversions are needed.
+module SchemaDSL =
 
-/// <summary>
-/// Domain-specific language for building schema definitions in a fluent style.
-/// Uses NTUKind from FNCS - BAREWire defers to NTU for all types.
-/// </summary>
-module DSL =
-    /// <summary>
-    /// Starts building a schema with the specified root type name
-    /// </summary>
-    let schema rootName = Schema.create rootName
+    /// Start a schema whose root type has the given name.
+    let schema (root: string) : SchemaDefinition = Schema.create root
 
-    // ==========================================================================
-    // Fixed-width integer types
-    // ==========================================================================
+    /// Declare a named type at the end of the schema.
+    let withType (name: string) (t: SchemaType) (s: SchemaDefinition) : SchemaDefinition =
+        Schema.addType name t s
 
-    /// Defines a BARE u8 type (8-bit unsigned integer)
-    let u8 = Bare.u8
+    /// Change the root type name.
+    let withRoot (root: string) (s: SchemaDefinition) : SchemaDefinition =
+        { Types = s.Types; Root = root }
 
-    /// Defines a BARE u16 type (16-bit unsigned integer)
-    let u16 = Bare.u16
+    /// Variable-width unsigned integer.
+    let uint : SchemaType = Bare.uint
+    /// Variable-width signed integer.
+    let int : SchemaType = Bare.int
+    /// Unsigned 8-bit integer.
+    let u8 : SchemaType = Bare.u8
+    /// Unsigned 16-bit integer.
+    let u16 : SchemaType = Bare.u16
+    /// Unsigned 32-bit integer.
+    let u32 : SchemaType = Bare.u32
+    /// Unsigned 64-bit integer.
+    let u64 : SchemaType = Bare.u64
+    /// Signed 8-bit integer.
+    let i8 : SchemaType = Bare.i8
+    /// Signed 16-bit integer.
+    let i16 : SchemaType = Bare.i16
+    /// Signed 32-bit integer.
+    let i32 : SchemaType = Bare.i32
+    /// Signed 64-bit integer.
+    let i64 : SchemaType = Bare.i64
+    /// IEEE-754 binary32.
+    let f32 : SchemaType = Bare.f32
+    /// IEEE-754 binary64.
+    let f64 : SchemaType = Bare.f64
+    /// Boolean.
+    let bool : SchemaType = Bare.bool
+    /// UTF-8 string.
+    let string : SchemaType = Bare.string
+    /// Length-prefixed bytes.
+    let data : SchemaType = Bare.data
+    /// Zero-length type, legal only as a union case.
+    let void' : SchemaType = Bare.void'
 
-    /// Defines a BARE u32 type (32-bit unsigned integer)
-    let u32 = Bare.u32
+    /// Exactly `n` bytes.
+    let fixedData (n: int) : SchemaType = Bare.fixedData n
 
-    /// Defines a BARE u64 type (64-bit unsigned integer)
-    let u64 = Bare.u64
+    /// A value that may be absent.
+    let optional (t: SchemaType) : SchemaType = Bare.optional t
 
-    /// Defines a BARE i8 type (8-bit signed integer)
-    let i8 = Bare.i8
+    /// A variable-length list.
+    let list (t: SchemaType) : SchemaType = Bare.list t
 
-    /// Defines a BARE i16 type (16-bit signed integer)
-    let i16 = Bare.i16
+    /// A list of exactly `n` elements.
+    let fixedList (t: SchemaType) (n: int) : SchemaType = Bare.fixedList t n
 
-    /// Defines a BARE i32 type (32-bit signed integer)
-    let i32 = Bare.i32
+    /// A map from keys to values.
+    let map (k: SchemaType) (v: SchemaType) : SchemaType = Bare.map k v
 
-    /// Defines a BARE i64 type (64-bit signed integer)
-    let i64 = Bare.i64
+    /// A tagged union.
+    let union (cases: UnionCase array) : SchemaType = Bare.union cases
 
-    // ==========================================================================
-    // Floating point types
-    // ==========================================================================
+    /// A union case with an explicit tag.
+    let case (tag: int) (t: SchemaType) : UnionCase = Bare.case tag t
 
-    /// Defines a BARE f32 type (32-bit floating point)
-    let f32 = Bare.f32
+    /// A struct with fields in wire order.
+    let struct' (fields: StructField array) : SchemaType = Bare.struct' fields
 
-    /// Defines a BARE f64 type (64-bit floating point)
-    let f64 = Bare.f64
+    /// A struct field.
+    let field (name: string) (t: SchemaType) : StructField = Bare.field name t
 
-    // ==========================================================================
-    // Variable-length integer types (varint encoding)
-    // ==========================================================================
+    /// An enum over `uint`, BARE's default base.
+    let enum (values: EnumValue array) : SchemaType = Bare.enum' PrimKind.UInt values
 
-    /// Defines a BARE uint type (variable-length unsigned integer)
-    let uint = Bare.uint
+    /// An enum over an explicit unsigned base kind.
+    let enumWith (baseKind: PrimKind) (values: EnumValue array) : SchemaType = Bare.enum' baseKind values
 
-    /// Defines a BARE int type (variable-length signed integer)
-    let int = Bare.int
+    /// An enum value.
+    let enumValue (name: string) (v: uint64) : EnumValue = Bare.enumValue name v
 
-    // ==========================================================================
-    // Other primitive types
-    // ==========================================================================
+    /// A reference to a declared type.
+    let typeRef (name: string) : SchemaType = Bare.typeRef name
 
-    /// Defines a BARE bool type (boolean value)
-    let bool = Bare.bool
-
-    /// Defines a BARE void type (no data)
-    let voidType = Bare.void
-
-    /// Defines a BARE string type (UTF-8 encoded string)
-    let string = Bare.string
-
-    /// Defines a BARE data type (variable-length byte array)
-    let data = Bare.data
-
-    /// Defines a BARE fixed data type (fixed-length byte array)
-    let fixedData length = Bare.fixedData length
-
-    // ==========================================================================
-    // Enum type
-    // ==========================================================================
-
-    /// Defines a BARE enum type (named constants with numeric values)
-    /// Uses NTUKind.NTUuint64 as the base type by default
-    let enum values = Bare.enum' NTUKind.NTUuint64 values
-
-    /// Defines a BARE enum type with a specific base kind
-    let enumWith baseKind values = Bare.enum' baseKind values
-
-    // ==========================================================================
-    // Aggregate types
-    // ==========================================================================
-
-    /// Defines a BARE optional type (value that may be present or absent)
-    let optional typ = Bare.optional typ
-
-    /// Defines a BARE list type (variable-length array of values)
-    let list typ = Bare.list typ
-
-    /// Defines a BARE fixed-length list type (fixed-length array of values)
-    let fixedList typ length = Bare.fixedList typ length
-
-    /// Defines a BARE map type (key-value mapping)
-    let map keyType valueType = Bare.map keyType valueType
-
-    /// Defines a BARE union type (tagged variant type)
-    let union cases = Bare.union cases
-
-    /// Defines a BARE struct type (record with named fields)
-    let struct' fields = Bare.struct' fields
-
-    // ==========================================================================
-    // Type references and fields
-    // ==========================================================================
-
-    /// References a user-defined type by name
-    let typeRef name = Bare.typeRef name
-
-    /// Creates a field definition for a struct
-    let field name typ : StructField = Bare.field name typ
-
-    // ==========================================================================
-    // Schema construction
-    // ==========================================================================
-
-    /// Adds a type to a schema
-    let withType name typ schemadef =
-        Schema.addType name typ schemadef
-
-    /// Sets the root type of a schema
-    let withRoot rootName schemadef =
-        Schema.setRoot rootName schemadef
-
-    /// Validates a schema
-    let validate schemadef =
-        Validation.validate schemadef
+    /// Validate a schema; empty means well-formed.
+    let validate (s: SchemaDefinition) : ValidationError array = Validation.validate s

@@ -32,6 +32,16 @@ The substrate reading shows up in two settings that look different and are the s
 
 The common root is one idea: any boundary is crossable under the formalism discipline once BAREWire is understood as a formalizable substrate with a well-articulated TCB. The hardware-composition documentation and the JavaScript-backend documentation converge on the identical typed-contract articulation because they are the same claim wearing two costumes.
 
+## The two missions, ranked
+
+The substrate reading has two audiences, and the Readiness Audit (2026-09-03) ranks them.
+
+**Primary.** BAREWire is the typed contract between Clef components: a value crossing a BAREWire boundary between two Clef programs, or between a Clef program and the platform it runs on, preserves its case structure, payload types, and dimensional annotations by construction. Read inward, the same vocabulary is the declared authority on memory layout for every processor a program runs on ([11 Platform Description](./11%20Platform%20Description.md)): memory spaces, buffer schemas, boundary surfaces, transports, each a declaration the compiler's three observers read.
+
+**Secondary.** The same contract binds to JavaScript, .NET, Rust, C, and C++, in two modes. In the *source-shared* mode one protocol file is compiled by Fable, .NET, and Composer, and the types are the contract; this is demonstrated in WrenHello and Conclave and is the mode the WREN stack depends on. In the *schema-shared* mode a BARE schema is the interchange artifact where source cannot be shared, and each language's codec is generated from it ([03 Schema System](./03%20Schema%20System.md)). The source-shared mode is designed first and firmest; the schema-shared mode degrades to the same envelope and encoding.
+
+The ranking decides what is built first and what a design question is measured against: a choice that serves the Clef-to-Clef contract and the declared platform layout wins over one that serves only a foreign binding.
+
 ## Where this sits
 
 This note is the conceptual foundation the implementation chapters build on. The encoding and schema mechanics are in [Encoding and Decoding Engine](./02%20Encoding%20and%20Decoding%20Engine.md) and [Schema System](./03%20Schema%20System.md); the boundary-crossing mechanics are in [Network Protocol](./05%20Network%20Protocol.md) and [IPC Integration](./06%20IPC%20Integration.md); the hardware-descriptor integration is in [Hardware Descriptors](./08%20Hardware%20Descriptors.md). Those documents describe how bytes cross. This one states what is preserved when they do, and why that makes BAREWire a substrate rather than a format.

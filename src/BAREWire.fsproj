@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The .NET build of BAREWire. Same sources as BAREWire.fidproj (Composer) and
+       BAREWire.Fable.fsproj (JavaScript); only the Encoding/Substrate shim files differ.
+       Referenced by Composer so the platform-description observers (Check, Manifest,
+       Obligations) run inside the compiler on values extracted from the PSG
+       (docs/11, "three observers, one truth"). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>BAREWire</RootNamespace>
+    <Nullable>disable</Nullable>
+    <WarningLevel>3</WarningLevel>
+    <NoWarn>FS0051</NoWarn>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Encoding/Cursor.fs" />
+    <Compile Include="Encoding/Substrate/Text.Utf16.fs" />
+    <Compile Include="Encoding/Substrate/Float.Dotnet.fs" />
+    <Compile Include="Encoding/Fmt.fs" />
+    <Compile Include="Encoding/Encoder.fs" />
+    <Compile Include="Encoding/Decoder.fs" />
+    <Compile Include="Encoding/Codec.fs" />
+    <Compile Include="Framing/Envelope.fs" />
+    <Compile Include="Schema/Definition.fs" />
+    <Compile Include="Schema/Validation.fs" />
+    <Compile Include="Schema/Analysis.fs" />
+    <Compile Include="Schema/Emit.fs" />
+    <Compile Include="Schema/DSL.fs" />
+    <Compile Include="Hardware/Descriptors.fs" />
+    <Compile Include="Hardware/Abi.fs" />
+    <Compile Include="Hardware/Validator.fs" />
+    <Compile Include="Hardware/Btf.fs" />
+    <Compile Include="Memory/Region.fs" />
+    <Compile Include="Memory/View.fs" />
+    <Compile Include="Platform/Tags.fs" />
+    <Compile Include="Platform/Description.fs" />
+    <Compile Include="Platform/Check.fs" />
+    <Compile Include="Platform/Manifest.fs" />
+    <Compile Include="Platform/Obligations.fs" />
+  </ItemGroup>
+
+</Project>

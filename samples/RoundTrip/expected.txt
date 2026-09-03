@@ -1,0 +1,27 @@
+written=16
+byte0=172
+byte1=2
+uint=300
+int=-2
+bool=1
+str=héllo
+u32lo=22136
+tag=3
+read=16
+faultread=-1
+framelen=21
+at=5
+corr=9
+consumed=25
+helloconsumed=8
+hellobuild=abc123
+sockaddrsize=16
+sockaddragrees=1
+pointerfree=1
+findings=0
+obligations=4
+obligation capacity_positive_consolereadln kind=buffer-capacity logic=QF_LIA source=cpu-linux-x86_64:consoleReadln refs=CWE-131,CWE-120 : buffer consoleReadln declares a positive capacity (1024 > 0)
+obligation capacity_consolereadln kind=buffer-capacity logic=QF_LIA source=cpu-linux-x86_64:consoleReadln refs=CWE-131,CWE-120 : buffer consoleReadln declares capacity 1024, at most the capacity 4096 of its space arena
+obligation input_bound_consolereadln kind=input-buffer-bound logic=QF_LIA source=cpu-linux-x86_64:consoleReadln refs=CWE-120 : the count handed to the reader of consoleReadln (1024) is at most its allocation (1024)
+obligation input_copy_bound_consolereadln kind=input-copy-bound logic=QF_LIA source=cpu-linux-x86_64:consoleReadln refs=CWE-120,CWE-787 : for any successful read of r bytes into consoleReadln (1 <= r <= 1024), the trimmed copy of r - 1 bytes is within 1023 bytes
+readlncapacity=1024

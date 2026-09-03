@@ -1,245 +1,419 @@
 namespace BAREWire.Schema
 
-open FSharp.Native.Compiler.NativeTypedTree.NativeTypes
+open BAREWire.Encoding
 
-// =============================================================================
-// Schema Analysis - Size and Alignment derived from NTU
-//
-// Size/alignment information comes from PlatformContext.resolveSize/resolveAlign.
-// BAREWire defers to NTU for all type metadata.
-// =============================================================================
+/// The encoded size of a type in bytes. `Max` is meaningful only when
+/// `IsBounded`; `IsFixed` means every value encodes to exactly `Min` bytes.
+type Size = {
+    Min: int
+    Max: int
+    IsBounded: bool
+    IsFixed: bool
+}
 
+/// The place of one field in a packed struct: its byte offset from the
+/// start of the struct and its fixed width.
+type FieldExtent = {
+    Name: string
+    Offset: int
+    Size: int
+}
+
+/// How two versions of a schema relate (docs/03, "Schema Versioning").
+type Compatibility = string
+
+[<RequireQualifiedAccess>]
+module Compatibility =
+    /// The same structure: either side reads the other's data.
+    [<Literal>]
+    let Full: Compatibility = "full"
+    /// The new schema reads old data.
+    [<Literal>]
+    let Backward: Compatibility = "backward"
+    /// The old schema reads new data.
+    [<Literal>]
+    let Forward: Compatibility = "forward"
+    /// Neither reads the other's data.
+    [<Literal>]
+    let Incompatible: Compatibility = "incompatible"
+
+/// Static analysis of schemas: wire sizes, packed offsets, structural
+/// equality, and version compatibility (docs/03, "Schema Analysis").
 module Analysis =
 
-    /// Compatibility level between schemas
-    type Compatibility =
-        | FullyCompatible
-        | BackwardCompatible
-        | ForwardCompatible
-        | Incompatible of reasons: string list
+    /// The largest ULEB128 encoding of a 64-bit value.
+    [<Literal>]
+    let MaxVarintSize = 10
 
-    /// Get wire size for a schema type
-    let rec getTypeSize (ctx: PlatformContext) (schema: SchemaDefinition) (typ: SchemaType) : Size =
-        match typ with
-        | SchemaType.NTU(kind, encoding) ->
-            match encoding with
-            | WireEncoding.Fixed ->
-                let size = PlatformContext.resolveSize ctx kind
-                { Min = size; Max = Some size; IsFixed = true }
-            | WireEncoding.VarInt ->
-                // Varint: 1-10 bytes for 64-bit integers
-                { Min = 1; Max = Some 10; IsFixed = false }
-            | WireEncoding.LengthPrefixed ->
-                // Length prefix (varint) + content
-                { Min = 1; Max = None; IsFixed = false }
+    let private fixedWidth (n: int) : Size =
+        { Min = n; Max = n; IsBounded = true; IsFixed = true }
 
-        | SchemaType.FixedData length ->
-            { Min = length; Max = Some length; IsFixed = true }
+    let private ranged (lo: int) (hi: int) : Size =
+        { Min = lo; Max = hi; IsBounded = true; IsFixed = false }
 
-        | SchemaType.Enum(_, _) ->
-            // Enums are varint encoded
-            { Min = 1; Max = Some 10; IsFixed = false }
+    let private unbounded (lo: int) : Size =
+        { Min = lo; Max = 0; IsBounded = false; IsFixed = false }
 
-        | SchemaType.Aggregate aggType ->
-            match aggType with
-            | AggregateType.Optional innerType ->
-                let innerSize = getTypeSize ctx schema innerType
-                { Min = 1; Max = innerSize.Max |> Option.map (fun m -> m + 1); IsFixed = false }
+    /// The number of bytes ULEB128 uses for a value: one per seven bits.
+    let varintSize (v: uint64) : int =
+        let mutable x = v
+        let mutable n = 1
+        while x >= 128UL do
+            x <- x >>> 7
+            n <- n + 1
+        n
 
-            | AggregateType.List _ ->
-                { Min = 1; Max = None; IsFixed = false }
+    /// The size of a primitive kind. `uint` and `int` are one to ten bytes;
+    /// `str` and `data` carry at least a one-byte length and no bound.
+    let private primSize (k: PrimKind) : Size =
+        if k = PrimKind.UInt || k = PrimKind.Int then ranged 1 MaxVarintSize
+        elif k = PrimKind.String || k = PrimKind.Data then unbounded 1
+        elif k = PrimKind.Void then fixedWidth 0
+        else fixedWidth (PrimKind.fixedSize k)
 
-            | AggregateType.FixedList(innerType, length) ->
-                let innerSize = getTypeSize ctx schema innerType
-                if innerSize.IsFixed then
-                    let totalSize = innerSize.Min * length
-                    { Min = totalSize; Max = Some totalSize; IsFixed = true }
-                else
-                    { Min = innerSize.Min * length; Max = None; IsFixed = false }
+    let private onPath (name: string) (path: string array) : bool =
+        let n = Array.length path
+        let mutable i = 0
+        let mutable found = false
+        while not found && i < n do
+            found <- Array.get path i = name
+            i <- i + 1
+        found
 
-            | AggregateType.Map(_, _) ->
-                { Min = 1; Max = None; IsFixed = false }
+    let private pushName (path: string array) (name: string) : string array =
+        let n = Array.length path
+        let out : string array = Array.zeroCreate (n + 1)
+        let mutable i = 0
+        while i < n do
+            Array.set out i (Array.get path i)
+            i <- i + 1
+        Array.set out n name
+        out
 
-            | AggregateType.Union cases ->
-                let caseSizes = cases |> Map.toList |> List.map (fun (_, v) -> getTypeSize ctx schema v)
-                let minSize = 1 + (List.minBy (fun s -> s.Min) caseSizes).Min
-                let maxSize =
-                    List.fold (fun acc size ->
-                        match acc, size.Max with
-                        | None, _ -> None
-                        | _, None -> None
-                        | Some accMax, Some sizeMax -> Some(max accMax sizeMax)
-                    ) (Some 10) caseSizes
-                { Min = minSize; Max = maxSize; IsFixed = false }
+    /// The size of a type. `path` holds the declaration names being
+    /// resolved; a reference back into it is a legal recursion through an
+    /// indirection, whose size has no bound.
+    let rec private sizeOf (schema: SchemaDefinition) (path: string array) (t: SchemaType) : Size =
+        match t with
+        | Prim k -> primSize k
+        | FixedData n ->
+            let width = if n < 0 then 0 else n
+            fixedWidth width
+        | Enum spec -> primSize spec.Base
+        | Optional inner ->
+            let s = sizeOf schema path inner
+            { Min = 1; Max = 1 + s.Max; IsBounded = s.IsBounded; IsFixed = false }
+        | List _ -> unbounded 1
+        | FixedList spec ->
+            let s = sizeOf schema path spec.Element
+            let n = if spec.Length < 0 then 0 else spec.Length
+            { Min = s.Min * n; Max = s.Max * n; IsBounded = s.IsBounded; IsFixed = s.IsFixed }
+        | Map _ -> unbounded 1
+        | Union cases -> unionSize schema path cases
+        | Struct fields -> structSize schema path fields
+        | TypeRef name -> refSize schema path name
 
-            | AggregateType.Struct fields ->
-                let fieldSizes = fields |> List.map (fun f -> getTypeSize ctx schema f.FieldType)
-                let totalMinSize = fieldSizes |> List.sumBy (fun s -> s.Min)
-                let totalMaxSize =
-                    fieldSizes
-                    |> List.fold (fun acc size ->
-                        match acc, size.Max with
-                        | None, _ -> None
-                        | _, None -> None
-                        | Some accMax, Some sizeMax -> Some(accMax + sizeMax)
-                    ) (Some 0)
-                let isFixed = fieldSizes |> List.forall (fun s -> s.IsFixed)
-                { Min = totalMinSize; Max = totalMaxSize; IsFixed = isFixed }
+    /// A union is its tag (the ULEB128 width of each case's tag, which is a
+    /// known constant) plus the case: the smallest case for `Min`, the
+    /// largest for `Max`. Fixed only when it has one case and that case is
+    /// fixed.
+    and private unionSize (schema: SchemaDefinition) (path: string array) (cases: UnionCase array) : Size =
+        let n = Array.length cases
+        let mutable lo = 0
+        let mutable hi = 0
+        let mutable bounded = true
+        let mutable i = 0
+        while i < n do
+            let c = Array.get cases i
+            let tag = if c.Tag < 0 then 0 else c.Tag
+            let tagSize = varintSize (uint64 tag)
+            let s = sizeOf schema path c.Type
+            let cLo = tagSize + s.Min
+            let cHi = tagSize + s.Max
+            lo <- (if i = 0 || cLo < lo then cLo else lo)
+            hi <- (if cHi > hi then cHi else hi)
+            bounded <- bounded && s.IsBounded
+            i <- i + 1
+        { Min = lo; Max = (if bounded then hi else 0); IsBounded = bounded; IsFixed = bounded && lo = hi }
 
-        | SchemaType.TypeRef typeName ->
-            match Map.tryFind typeName schema.Types with
-            | Some t -> getTypeSize ctx schema t
-            | None -> failwith $"Type not found: {typeName}"
+    /// A struct is the sum of its fields, packed with no padding.
+    and private structSize (schema: SchemaDefinition) (path: string array) (fields: StructField array) : Size =
+        let n = Array.length fields
+        let mutable lo = 0
+        let mutable hi = 0
+        let mutable bounded = true
+        let mutable isFixed = true
+        let mutable i = 0
+        while i < n do
+            let f = Array.get fields i
+            let s = sizeOf schema path f.Type
+            lo <- lo + s.Min
+            hi <- hi + s.Max
+            bounded <- bounded && s.IsBounded
+            isFixed <- isFixed && s.IsFixed
+            i <- i + 1
+        { Min = lo; Max = (if bounded then hi else 0); IsBounded = bounded; IsFixed = isFixed }
 
-    /// Get alignment for a schema type
-    let rec getTypeAlignment (ctx: PlatformContext) (schema: SchemaDefinition) (typ: SchemaType) : Alignment =
-        match typ with
-        | SchemaType.NTU(kind, _) ->
-            { Value = PlatformContext.resolveAlign ctx kind }
+    and private refSize (schema: SchemaDefinition) (path: string array) (name: string) : Size =
+        let target = Schema.tryFindType name schema
+        match target with
+        | None -> unbounded 0
+        | Some tt -> (if onPath name path then unbounded 0 else sizeOf schema (pushName path name) tt)
 
-        | SchemaType.FixedData _ ->
-            { Value = 1 }
+    /// The encoded size of a type within a schema. An undefined reference
+    /// is unbounded; validate first for a meaningful answer.
+    let wireSize (schema: SchemaDefinition) (t: SchemaType) : Size =
+        sizeOf schema (Array.zeroCreate 0) t
 
-        | SchemaType.Enum(baseKind, _) ->
-            { Value = PlatformContext.resolveAlign ctx baseKind }
+    /// True when every value of the type encodes to the same width.
+    let isFixedWidth (schema: SchemaDefinition) (t: SchemaType) : bool =
+        (wireSize schema t).IsFixed
 
-        | SchemaType.Aggregate aggType ->
-            match aggType with
-            | AggregateType.Optional innerType ->
-                let innerAlign = getTypeAlignment ctx schema innerType
-                { Value = max 1 innerAlign.Value }
+    /// The byte offset and width of each field of a struct whose fields are
+    /// all fixed width. BARE structs are packed: no alignment padding, each
+    /// field starts where the previous one ends. Empty when any field is not
+    /// fixed width, since no static offsets exist past it.
+    let packedOffsets (schema: SchemaDefinition) (fields: StructField array) : FieldExtent array =
+        let n = Array.length fields
+        let mutable allFixed = true
+        let mutable i = 0
+        while i < n do
+            let f = Array.get fields i
+            allFixed <- allFixed && isFixedWidth schema f.Type
+            i <- i + 1
+        let count = if allFixed then n else 0
+        let out : FieldExtent array = Array.zeroCreate count
+        let mutable offset = 0
+        let mutable j = 0
+        while j < count do
+            let f = Array.get fields j
+            let s = wireSize schema f.Type
+            // SUBSET(record-inference): preferred spelling is the unqualified record literal in place.
+            let extent : FieldExtent = { FieldExtent.Name = f.Name; FieldExtent.Offset = offset; FieldExtent.Size = s.Min }
+            Array.set out j extent
+            offset <- offset + s.Min
+            j <- j + 1
+        out
 
-            | AggregateType.List innerType
-            | AggregateType.FixedList(innerType, _) ->
-                let innerAlign = getTypeAlignment ctx schema innerType
-                { Value = max 1 innerAlign.Value }
+    /// The name a reference carries, or "" for any other type.
+    let private refName (t: SchemaType) : string =
+        match t with
+        | TypeRef name -> name
+        | _ -> ""
 
-            | AggregateType.Map(keyType, valueType) ->
-                let keyAlign = getTypeAlignment ctx schema keyType
-                let valueAlign = getTypeAlignment ctx schema valueType
-                { Value = max keyAlign.Value valueAlign.Value }
+    /// Structural equality of two types, `a` read in `sa` and `b` in `sb`.
+    /// References resolve in their own schema; a pair of names already
+    /// being compared is taken as equal, so legal recursive types compare
+    /// without looping.
+    let rec private equalIn (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (a: SchemaType) (b: SchemaType) : bool =
+        let ra = refName a
+        let rb = refName b
+        if ra <> "" || rb <> "" then equalRefs sa sb path ra rb a b
+        else
+            match a with
+            | Prim ka -> equalPrim ka b
+            | FixedData na -> equalFixedData na b
+            | Enum ea -> equalEnum ea b
+            | Optional ia -> equalOptional sa sb path ia b
+            | List ia -> equalList sa sb path ia b
+            | FixedList fa -> equalFixedList sa sb path fa b
+            | Map ma -> equalMap sa sb path ma b
+            | Union ca -> equalUnion sa sb path ca b
+            | Struct fa -> equalStruct sa sb path fa b
+            | TypeRef _ -> false
 
-            | AggregateType.Union cases ->
-                let caseAlignments = cases |> Map.toList |> List.map (fun (_, v) -> getTypeAlignment ctx schema v)
-                let maxAlign = caseAlignments |> List.map (fun a -> a.Value) |> List.max
-                { Value = max 1 maxAlign }
+    and private equalRefs (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ra: string) (rb: string) (a: SchemaType) (b: SchemaType) : bool =
+        let key = Text.append (Text.append ra "|") rb
+        if onPath key path then true
+        else
+            let ta = if ra <> "" then Schema.tryFindType ra sa else Some a
+            let tb = if rb <> "" then Schema.tryFindType rb sb else Some b
+            match ta with
+            | None -> false
+            | Some xa -> equalResolved sa sb (pushName path key) xa tb
 
-            | AggregateType.Struct fields ->
-                let fieldAlignments = fields |> List.map (fun f -> getTypeAlignment ctx schema f.FieldType)
-                let maxAlign = fieldAlignments |> List.map (fun a -> a.Value) |> List.max
-                { Value = maxAlign }
+    and private equalResolved (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (xa: SchemaType) (tb: SchemaType option) : bool =
+        match tb with
+        | None -> false
+        | Some xb -> equalIn sa sb path xa xb
 
-        | SchemaType.TypeRef typeName ->
-            match Map.tryFind typeName schema.Types with
-            | Some t -> getTypeAlignment ctx schema t
-            | None -> failwith $"Type not found: {typeName}"
+    and private equalPrim (ka: PrimKind) (b: SchemaType) : bool =
+        match b with
+        | Prim kb -> ka = kb
+        | _ -> false
 
-    /// Check if two schema types are compatible
-    let rec areTypesCompatible
-        (ctx: PlatformContext)
-        (schema1: SchemaDefinition)
-        (schema2: SchemaDefinition)
-        (type1: SchemaType)
-        (type2: SchemaType)
-        : bool =
-        match type1, type2 with
-        | SchemaType.NTU(k1, e1), SchemaType.NTU(k2, e2) ->
-            k1 = k2 && e1 = e2
+    and private equalFixedData (na: int) (b: SchemaType) : bool =
+        match b with
+        | FixedData nb -> na = nb
+        | _ -> false
 
-        | SchemaType.FixedData len1, SchemaType.FixedData len2 ->
-            len1 = len2
+    and private equalEnum (ea: EnumSpec) (b: SchemaType) : bool =
+        match b with
+        | Enum eb -> equalEnumSpecs ea eb
+        | _ -> false
 
-        | SchemaType.Enum(k1, v1), SchemaType.Enum(k2, v2) ->
-            k1 = k2 && v1 = v2
+    and private equalEnumSpecs (ea: EnumSpec) (eb: EnumSpec) : bool =
+        let n = Array.length ea.Values
+        let mutable same = ea.Base = eb.Base && n = Array.length eb.Values
+        let mutable i = 0
+        while same && i < n do
+            let va = Array.get ea.Values i
+            let vb = Array.get eb.Values i
+            same <- va.Name = vb.Name && va.Value = vb.Value
+            i <- i + 1
+        same
 
-        | SchemaType.TypeRef n1, SchemaType.TypeRef n2 ->
-            n1 = n2
+    and private equalOptional (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ia: SchemaType) (b: SchemaType) : bool =
+        match b with
+        | Optional ib -> equalIn sa sb path ia ib
+        | _ -> false
 
-        | SchemaType.Aggregate agg1, SchemaType.Aggregate agg2 ->
-            match agg1, agg2 with
-            | AggregateType.Optional t1, AggregateType.Optional t2 ->
-                areTypesCompatible ctx schema1 schema2 t1 t2
+    and private equalList (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ia: SchemaType) (b: SchemaType) : bool =
+        match b with
+        | List ib -> equalIn sa sb path ia ib
+        | _ -> false
 
-            | AggregateType.List t1, AggregateType.List t2 ->
-                areTypesCompatible ctx schema1 schema2 t1 t2
+    and private equalFixedList (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (fa: FixedListSpec) (b: SchemaType) : bool =
+        match b with
+        | FixedList fb -> fa.Length = fb.Length && equalIn sa sb path fa.Element fb.Element
+        | _ -> false
 
-            | AggregateType.FixedList(t1, len1), AggregateType.FixedList(t2, len2) ->
-                len1 = len2 && areTypesCompatible ctx schema1 schema2 t1 t2
+    and private equalMap (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ma: MapSpec) (b: SchemaType) : bool =
+        match b with
+        | Map mb -> equalIn sa sb path ma.Key mb.Key && equalIn sa sb path ma.Value mb.Value
+        | _ -> false
 
-            | AggregateType.Map(k1, v1), AggregateType.Map(k2, v2) ->
-                areTypesCompatible ctx schema1 schema2 k1 k2
-                && areTypesCompatible ctx schema1 schema2 v1 v2
+    and private equalUnion (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ca: UnionCase array) (b: SchemaType) : bool =
+        match b with
+        | Union cb -> equalCases sa sb path ca cb
+        | _ -> false
 
-            | AggregateType.Union cases1, AggregateType.Union cases2 ->
-                Map.forall (fun tag typ1 ->
-                    match Map.tryFind tag cases2 with
-                    | Some typ2 -> areTypesCompatible ctx schema1 schema2 typ1 typ2
-                    | None -> false
-                ) cases1
+    and private equalCases (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (ca: UnionCase array) (cb: UnionCase array) : bool =
+        let n = Array.length ca
+        let mutable same = n = Array.length cb
+        let mutable i = 0
+        while same && i < n do
+            let x = Array.get ca i
+            let y = Array.get cb i
+            same <- x.Tag = y.Tag && equalIn sa sb path x.Type y.Type
+            i <- i + 1
+        same
 
-            | AggregateType.Struct fields1, AggregateType.Struct fields2 ->
-                List.length fields1 = List.length fields2
-                && List.forall2 (fun (f1: StructField) (f2: StructField) ->
-                    f1.Name = f2.Name
-                    && areTypesCompatible ctx schema1 schema2 f1.FieldType f2.FieldType
-                ) fields1 fields2
+    and private equalStruct (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (fa: StructField array) (b: SchemaType) : bool =
+        match b with
+        | Struct fb -> equalFields sa sb path fa fb
+        | _ -> false
 
-            | _, _ -> false
+    and private equalFields (sa: SchemaDefinition) (sb: SchemaDefinition) (path: string array) (fa: StructField array) (fb: StructField array) : bool =
+        let n = Array.length fa
+        let mutable same = n = Array.length fb
+        let mutable i = 0
+        while same && i < n do
+            let x = Array.get fa i
+            let y = Array.get fb i
+            same <- x.Name = y.Name && equalIn sa sb path x.Type y.Type
+            i <- i + 1
+        same
 
-        | _, _ -> false
+    /// Structural equality of two types, each read in its own schema: names
+    /// resolve to their declarations, so a type is equal to an identical
+    /// declaration under another name. Pass the same schema twice to compare
+    /// two types of one schema.
+    let typesEqual (sa: SchemaDefinition) (sb: SchemaDefinition) (a: SchemaType) (b: SchemaType) : bool =
+        equalIn sa sb (Array.zeroCreate 0) a b
 
-    /// Check compatibility between two schemas
-    let checkCompatibility (ctx: PlatformContext) (oldSchema: SchemaDefinition) (newSchema: SchemaDefinition) : Compatibility =
-        let checkRootCompatibility () =
-            match Map.tryFind oldSchema.Root oldSchema.Types, Map.tryFind newSchema.Root newSchema.Types with
-            | Some oldRoot, Some newRoot ->
-                match oldRoot, newRoot with
-                | SchemaType.Aggregate(AggregateType.Union oldCases), SchemaType.Aggregate(AggregateType.Union newCases) ->
-                    let allOldCasesExist =
-                        oldCases |> Map.forall (fun oldTag oldType ->
-                            match Map.tryFind oldTag newCases with
-                            | Some newType -> areTypesCompatible ctx oldSchema newSchema oldType newType
-                            | None -> false)
+    /// Follow references until a type that is not a reference, or give up.
+    let private deref (schema: SchemaDefinition) (t: SchemaType) : SchemaType =
+        let mutable cur = t
+        let mutable hops = 0
+        let mutable fin = false
+        while not fin do
+            let name = refName cur
+            let i = if name <> "" && hops < 64 then Schema.indexOf name schema else -1
+            let found = i >= 0
+            if found then
+                cur <- (Array.get schema.Types i).Type
+            if found then
+                hops <- hops + 1
+            fin <- not found
+        cur
 
-                    let allNewCasesExist =
-                        newCases |> Map.forall (fun newTag newType ->
-                            match Map.tryFind newTag oldCases with
-                            | Some oldType -> areTypesCompatible ctx newSchema oldSchema newType oldType
-                            | None -> false)
+    /// True when every case of `xs` has a case in `ys` with the same tag
+    /// and an equal type.
+    let private casesCovered (sx: SchemaDefinition) (sy: SchemaDefinition) (xs: UnionCase array) (ys: UnionCase array) : bool =
+        let n = Array.length xs
+        let m = Array.length ys
+        let mutable covered = true
+        let mutable i = 0
+        while covered && i < n do
+            let x = Array.get xs i
+            let mutable found = false
+            let mutable j = 0
+            while not found && j < m do
+                let y = Array.get ys j
+                found <- x.Tag = y.Tag && equalIn sx sy (Array.zeroCreate 0) x.Type y.Type
+                j <- j + 1
+            covered <- found
+            i <- i + 1
+        covered
 
-                    match allOldCasesExist, allNewCasesExist with
-                    | true, true -> FullyCompatible
-                    | true, false -> BackwardCompatible
-                    | false, true -> ForwardCompatible
-                    | false, false -> Incompatible [ "Incompatible union types" ]
+    /// True when the first `Array.length xs` fields of `ys` are `xs`, in
+    /// order, with equal types.
+    let private fieldsPrefix (sx: SchemaDefinition) (sy: SchemaDefinition) (xs: StructField array) (ys: StructField array) : bool =
+        let n = Array.length xs
+        let mutable prefix = n <= Array.length ys
+        let mutable i = 0
+        while prefix && i < n do
+            let x = Array.get xs i
+            let y = Array.get ys i
+            prefix <- x.Name = y.Name && equalIn sx sy (Array.zeroCreate 0) x.Type y.Type
+            i <- i + 1
+        prefix
 
-                | SchemaType.Aggregate(AggregateType.Struct oldFields), SchemaType.Aggregate(AggregateType.Struct newFields) ->
-                    let rec checkFields oldFields newFields =
-                        match oldFields, newFields with
-                        | [], _ -> true
-                        | _, [] -> false
-                        | oldField :: oldRest, newField :: newRest ->
-                            oldField.Name = newField.Name
-                            && areTypesCompatible ctx oldSchema newSchema oldField.FieldType newField.FieldType
-                            && checkFields oldRest newRest
+    let private unionCompatibility (oldSchema: SchemaDefinition) (newSchema: SchemaDefinition) (oldCases: UnionCase array) (newCases: UnionCase array) : Compatibility =
+        let oldCovered = casesCovered oldSchema newSchema oldCases newCases
+        let newCovered = casesCovered newSchema oldSchema newCases oldCases
+        if oldCovered && newCovered then Compatibility.Full
+        elif oldCovered then Compatibility.Backward
+        elif newCovered then Compatibility.Forward
+        else Compatibility.Incompatible
 
-                    let allOldFieldsExist = checkFields oldFields newFields
+    let private structCompatibility (oldSchema: SchemaDefinition) (newSchema: SchemaDefinition) (oldFields: StructField array) (newFields: StructField array) : Compatibility =
+        let oldPrefix = fieldsPrefix oldSchema newSchema oldFields newFields
+        let newPrefix = fieldsPrefix newSchema oldSchema newFields oldFields
+        if oldPrefix && newPrefix then Compatibility.Full
+        elif oldPrefix then Compatibility.Backward
+        elif newPrefix then Compatibility.Forward
+        else Compatibility.Incompatible
 
-                    if allOldFieldsExist then
-                        if List.length oldFields = List.length newFields then
-                            FullyCompatible
-                        else
-                            BackwardCompatible
-                    else
-                        Incompatible [ "Incompatible struct types" ]
+    let private rootCompatibility (oldSchema: SchemaDefinition) (newSchema: SchemaDefinition) (oldRoot: SchemaType) (newRoot: SchemaType) : Compatibility =
+        let o = deref oldSchema oldRoot
+        let n = deref newSchema newRoot
+        match o with
+        | Union oc ->
+            (match n with
+             | Union nc -> unionCompatibility oldSchema newSchema oc nc
+             | _ -> Compatibility.Incompatible)
+        | Struct ofs ->
+            (match n with
+             | Struct nfs -> structCompatibility oldSchema newSchema ofs nfs
+             | _ -> Compatibility.Incompatible)
+        | _ -> (if typesEqual oldSchema newSchema o n then Compatibility.Full else Compatibility.Incompatible)
 
-                | _ ->
-                    if areTypesCompatible ctx oldSchema newSchema oldRoot newRoot then
-                        FullyCompatible
-                    else
-                        Incompatible [ "Root types are different" ]
-
-            | None, _ -> Incompatible [$"Old root type '{oldSchema.Root}' not found"]
-            | _, None -> Incompatible [$"New root type '{newSchema.Root}' not found"]
-
-        checkRootCompatibility ()
+    /// The compatibility of two schema versions, judged at their roots
+    /// (docs/03, "Schema Versioning"). Unions: the new schema reads old data
+    /// when every old case survives with its tag and type (backward), the
+    /// old schema reads new data when every new case was already there
+    /// (forward), both when the case sets agree (full). Structs: the old
+    /// fields must be a prefix of the new ones in order (backward), or the
+    /// new a prefix of the old (forward), or the same (full). Any other
+    /// root must be structurally equal. A missing root is incompatible.
+    let compatibility (oldSchema: SchemaDefinition) (newSchema: SchemaDefinition) : Compatibility =
+        let oldRoot = Schema.tryFindType oldSchema.Root oldSchema
+        let newRoot = Schema.tryFindType newSchema.Root newSchema
+        match oldRoot with
+        | None -> Compatibility.Incompatible
+        | Some o ->
+            (match newRoot with
+             | None -> Compatibility.Incompatible
+             | Some n -> rootCompatibility oldSchema newSchema o n)

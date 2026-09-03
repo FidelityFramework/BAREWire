@@ -59,3 +59,6 @@ src/.idea/.idea.src.dir/.idea/AndroidProjectSystem.xml
 src/.idea/.idea.src.dir/.idea/encodings.xml
 src/.idea/.idea.src.dir/.idea/indexLayout.xml
 src/.idea/.idea.src.dir/.idea/vcs.xml
+
+# Composer sample build output (samples/RoundTrip/targets); HelloProof commits its targets deliberately, this repository does not
+samples/**/targets/

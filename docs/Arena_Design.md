@@ -8,7 +8,7 @@
 
 ## The Problem
 
-F# functions can allocate memory on the stack using `NativePtr.stackalloc`. This memory is fast to allocate (just bump the stack pointer) and automatically freed when the function returns. However, stack-allocated memory **cannot outlive the creating function**.
+Clef functions can allocate memory on the stack using `NativePtr.stackalloc`. This memory is fast to allocate (just bump the stack pointer) and automatically freed when the function returns. However, stack-allocated memory **cannot outlive the creating function**.
 
 Consider `Console.readln`:
 
@@ -66,7 +66,7 @@ The arena carries a lifetime marker as a type parameter:
 type Arena<[<Measure>] 'lifetime>
 ```
 
-When code allocates from an arena, the resulting pointer conceptually inherits the arena's lifetime. While F# can't enforce this statically for raw `nativeint`, the pattern is documented and the capability types (`StringCap<'lifetime>`, etc.) can track it.
+When code allocates from an arena, the resulting pointer conceptually inherits the arena's lifetime. While the type system does not yet enforce this statically for raw `nativeint`, the pattern is documented and the capability types (`StringCap<'lifetime>`, etc.) can track it.
 
 ### 3. Caller-Controlled Scope
 

@@ -1,0 +1,27 @@
+# The native gate (docs/12 §5): a reachable program over every shared tier,
+# compiled by Composer to a binary and run. Its transcript is compared with
+# the .NET test gate's values for the same inputs; agreement is the
+# cross-substrate byte-identity claim made testable (Readiness Audit §4 step 4).
+#
+# Status 2026-09-03: does not yet compile on the Composer snapshot HelloProof
+# pins (docs/12 §5, "Native"); it is the acceptance program for the compiler
+# lane's rebuilt Composer.
+
+[package]
+name = "RoundTrip"
+version = "0.1.0"
+description = "BAREWire native gate"
+
+[compilation]
+target = "cpu"
+
+[dependencies]
+platform = { path = "/home/hhh/repos/Fidelity.Platform/CPU/Linux/x86_64/Fidelity.Platform.fidproj" }
+barewire = { path = "../../src/BAREWire.fidproj" }
+
+[build]
+sources = [
+    "Main.clef"
+]
+output = "roundtrip"
+output_kind = "console"

@@ -88,7 +88,7 @@ Lifetime is deterministic memory management, not disposal patterns. Handles and 
 
 Two target classes have no OS IPC to bind, and neither gets a simulated provider:
 
-- **The JavaScript/WREN boundary.** Type erasure, not process isolation, is the boundary. BAREWire's encoding modules carry the typed contract across it — case structure and dimensional annotations preserved by construction — with the transport being whatever the web context provides (WebSocket IPC on the WREN stack). See [Substrate_Formalism](./Substrate_Formalism.md) on the erasure boundary.
+- **The JavaScript/WREN boundary.** Type erasure, not process isolation, is the boundary. BAREWire's encoding modules carry the typed contract across it — case structure and dimensional annotations preserved by construction — with the transport being whatever the web context provides: today the WebView script-message channel, carrying the envelope Base64-wrapped (WrenHello, Conclave); next a localhost WebSocket carrying it as binary messages (Conclave W-03). Changing between them touches only the wrapping layer (Readiness Audit §4 step 7). See [Substrate_Formalism](./Substrate_Formalism.md) on the erasure boundary.
 - **FPGA and freestanding targets.** No processes, so no IPC in the OS sense: communication is on-chip queues, DMA regions, and wire transports, declared through BAREWire descriptors the same way peripherals are ([08 Hardware Descriptors](./08%20Hardware%20Descriptors.md), [11 Platform Description](./11%20Platform%20Description.md)). The contract layer is identical; the primitives beneath it are the target's own.
 
 ## 6. The Proof Surface

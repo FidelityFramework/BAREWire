@@ -4,16 +4,7 @@ BAREWire provides a hardware descriptor system for memory-mapped peripheral acce
 
 ## Status
 
-> **Implementation Status: PLANNED**
->
-> The types defined in this document are the design specification for BAREWire's hardware descriptor system. Implementation is required before Farscape can generate complete peripheral bindings.
-
-> These types participate in the **quotation-based memory architecture**: Farscape generates `Expr<PeripheralDescriptor>` quotations and active patterns for PSG recognition (see `~/repos/Composer/docs/`).
->
-> Key integration point: the `MemoryModel` record type ties together:
-> - Quotations encoding memory constraints
-> - Active patterns for PSG node recognition
-> - Integration surface for the Composer nanopass pipeline
+> **Implemented (2026-09-03, Readiness Audit §4 step 5).** The descriptor types live in `src/Hardware/Descriptors.fs` in fixed widths: `Repr` is a string tag (`"u8"`, `"i32"`, `"f64"`, `"pointer"`, ...) and every field carries an inline element `Count`, so `reserved[16]` is one field and explicit padding is `Repr.U8` with a count, the two shapes Farscape flattened or dropped (docs/10). `MemoryRegionKind` and `AccessKind` are string tags with constant modules. `src/Hardware/Abi.fs` holds the ABI profiles (SysV AMD64, AArch64, ARM AAPCS, i386 SysV, RISC-V 64, wasm32). `src/Hardware/Validator.fs` is the validator this document and docs/10 asked for first: `derive` computes a C natural layout under an ABI (what corrected Farscape output looks like), `validate` reports misaligned, overlapping, out-of-order, gapped, and mis-sized descriptors with named findings, `explain` prints them. `Layout.isPointerFree` states the rule a layout shared with a less trusted side must meet. `src/Hardware/Btf.fs` serializes descriptors as BTF, the kernel's type format, and reads it back; `bpftool btf dump` confirms the blob (docs/11, "The kernel as a described platform"). The quotation-based `MemoryModel` record described below is the earlier design: descriptors are plain typed records the compiler extracts structurally from the PSG (Fidelity.Platform `CANONICAL_PLATFORM_SPEC.md`, "The mechanism constraint"), and the volatile-access emission remains the compiler's.
 
 ## Overview
 
@@ -282,7 +273,7 @@ Alex uses `MemoryRegionKind` to determine:
 Hardware descriptors work in conjunction with the NTU's measure types — pin and layout metadata ride on the type constructors themselves (e.g. `FieldPinAttributes`; see `~/repos/clef-lang-spec/spec/native-type-universe.md`):
 
 ```fsharp
-// fsnative provides these measure types
+// The Clef compiler services provide these measure types
 [<Measure>] type peripheral
 [<Measure>] type readOnly
 [<Measure>] type writeOnly
@@ -303,7 +294,7 @@ type GPIO_TypeDef = {
 The dependency chain:
 
 ```
-fsnative ──provides types──▶ Farscape ──uses descriptors from──▶ BAREWire
+Clef compiler services ──provide types──▶ Farscape ──uses descriptors from──▶ BAREWire
 ```
 
 ## Code Generation Impact
@@ -311,7 +302,7 @@ fsnative ──provides types──▶ Farscape ──uses descriptors from─�
 When Alex encounters peripheral access in the PSG, it uses descriptor information:
 
 ```fsharp
-// F# source
+// Clef source
 let value = gpio.IDR  // Read input register
 
 // Alex checks descriptor:
@@ -328,7 +319,7 @@ let value = gpio.IDR  // Read input register
 For write-only registers:
 
 ```fsharp
-// F# source
+// Clef source
 gpio.BSRR <- 0x20u  // Set pin 5
 
 // Alex checks descriptor:
@@ -382,9 +373,12 @@ Hardware descriptor types live in:
 BAREWire/
 └── src/
     └── Hardware/
-        └── Descriptors.fs   # PeripheralDescriptor, FieldDescriptor,
-                             # AccessKind, MemoryRegionKind, BitFieldDescriptor,
-                             # StructDescriptor
+        ├── Descriptors.fs   # PeripheralDescriptor, FieldDescriptor (Repr, Count),
+        │                    # AccessKind, MemoryRegionKind, BitFieldDescriptor,
+        │                    # StructDescriptor, Layout.isPointerFree
+        ├── Abi.fs           # AbiProfile and the known profiles
+        ├── Validator.fs     # derive, validate, explain
+        └── Btf.fs           # BTF emitter and reader
 ```
 
 

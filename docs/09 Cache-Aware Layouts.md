@@ -1,5 +1,7 @@
 # Cache-Aware Layouts
 
+> **Status (2026-09-03).** Natural alignment (Rules 2 and 3) is built: `src/Hardware/Abi.fs` carries each ABI's alignment facts and `Validator.derive` lays a struct out by them, padding included, which is the layout a `View` reads through. Cache-line size, the `[<CacheLineAligned>]` attribute, false-sharing analysis, and the DWARF annotations remain design; the natural home for the cache-line fact is a field on `AbiProfile` beside `MaxAlign`, resolved from the target the way the profile's other facts are.
+
 BAREWire's deterministic layout system enables compile-time analysis of cache behavior. This document specifies how BAREWire ensures cache-friendly memory layouts and prevents common cache pathologies.
 
 ## Architectural Context

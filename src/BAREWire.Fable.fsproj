@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Fable (JavaScript) build of BAREWire. Same sources as BAREWire.fidproj and
+       BAREWire.fsproj; the Encoding/Substrate shim files select the JavaScript
+       realizations (UTF-16 transcoding, DataView float casts). Compile with
+       `fable src/BAREWire.Fable.fsproj` with an output directory. -->
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>BAREWire</RootNamespace>
+    <DefineConstants>FABLE_COMPILER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Encoding/Cursor.fs" />
+    <Compile Include="Encoding/Substrate/Text.Utf16.fs" />
+    <Compile Include="Encoding/Substrate/Float.Fable.fs" />
+    <Compile Include="Encoding/Fmt.fs" />
+    <Compile Include="Encoding/Encoder.fs" />
+    <Compile Include="Encoding/Decoder.fs" />
+    <Compile Include="Encoding/Codec.fs" />
+    <Compile Include="Framing/Envelope.fs" />
+    <Compile Include="Schema/Definition.fs" />
+    <Compile Include="Schema/Validation.fs" />
+    <Compile Include="Schema/Analysis.fs" />
+    <Compile Include="Schema/Emit.fs" />
+    <Compile Include="Schema/DSL.fs" />
+    <Compile Include="Hardware/Descriptors.fs" />
+    <Compile Include="Hardware/Abi.fs" />
+    <Compile Include="Hardware/Validator.fs" />
+    <Compile Include="Hardware/Btf.fs" />
+    <Compile Include="Memory/Region.fs" />
+    <Compile Include="Memory/View.fs" />
+    <Compile Include="Platform/Tags.fs" />
+    <Compile Include="Platform/Description.fs" />
+    <Compile Include="Platform/Check.fs" />
+    <Compile Include="Platform/Manifest.fs" />
+    <Compile Include="Platform/Obligations.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Fable.Core" Version="5.2.0" />
+  </ItemGroup>
+
+</Project>

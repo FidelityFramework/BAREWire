@@ -1,5 +1,7 @@
 # Network Protocol
 
+> **Envelope adopted (2026-09-03).** The frame format below, with its magic bytes, version byte, flags, and per-frame schema id, is the earlier design and is superseded by the envelope the Readiness Audit §4 step 3 adopts from Conclave.Wire, implemented in `src/Framing/Envelope.fs`: a kind byte (Tell, Ask, Reply, Event, Control), a u32 little-endian correlation id, and the BARE payload; a u32 little-endian length prefix only on stream transports; the schema epoch carried once in a `Hello` control frame; no magic or version bytes, because the schema is fixed at compile time on both ends. The `Request`/`Response` records below with `Guid` correlation and the per-frame `SchemaId` are replaced by the envelope's correlation and the epoch handshake. The transport, RPC, streaming, and security sections remain design notes to be re-read against that envelope; where they use `Guid`, `BitConverter`, `DateTimeOffset`, `Array.Copy`, or an `ITransport` interface, the implementation will not (Readiness Audit §5). The `0xREuy` literal that stood at the magic-bytes line since this document was written did not compile and has been replaced by a compiling placeholder; the adopted envelope has no magic bytes at all.
+
 BAREWire provides a flexible, efficient, and type-safe network protocol layer that enables binary communication over various transport mechanisms. This document explains the network protocol architecture and how to use it effectively.
 
 ## Core Concepts
@@ -19,7 +21,7 @@ BAREWire uses a simple and efficient frame format:
 /// Frame format types
 module FrameFormat =
     /// Magic bytes that identify a BAREWire frame
-    let MagicBytes = [| 0xBAuy; 0xREuy |]
+    let MagicBytes = [| 0xBAuy; 0x5Euy |]  // superseded: the adopted envelope has no magic bytes
     
     /// Protocol version
     let Version = 1uy

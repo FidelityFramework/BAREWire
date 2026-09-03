@@ -1,22 +1,64 @@
+# BAREWire: the typed contract between Clef components, and the declared
+# authority on memory layout for every processor a program runs on
+# (docs/Substrate_Formalism.md, docs/11 Platform Description.md).
+#
+# Three project files compile one source tree. This one is the Clef build;
+# BAREWire.fsproj is the .NET build (referenced by Composer so the platform
+# observers run inside the compiler); BAREWire.Fable.fsproj is the JavaScript
+# build. Only the Encoding/Substrate shim files differ between them.
+#
+# This project is consumed as a dependency: a consumer's fidproj declares
+# `barewire = { path = ".../BAREWire/src/BAREWire.fidproj" }` and Composer
+# splices these sources in this order. The gate that counts is
+# samples/RoundTrip, a reachable program compiled to native and run
+# (docs/12 Intersection Subset.md §5); a standalone compile of this file is
+# not a gate on the current Composer snapshot.
+
 [package]
 name = "BAREWire"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Houston Haynes"]
-description = "Binary data encoding, memory mapping, and communication for the Fidelity ecosystem."
+description = "Typed contracts across boundaries: BARE encoding, framing, schemas, layout descriptors and validation, memory regions, and platform descriptions for the Fidelity Framework."
+
+[compilation]
+target = "library"
 
 [build]
 sources = [
-    "Hardware/Descriptors.fs",
-    "Encoding/Memory.fs",
+    # Encoding: portable byte model and BARE codec (docs/02)
+    "Encoding/Cursor.fs",
+    "Encoding/Substrate/Text.Clef.fs",
+    "Encoding/Substrate/Float.Clef.fs",
+    "Encoding/Fmt.fs",
     "Encoding/Encoder.fs",
     "Encoding/Decoder.fs",
     "Encoding/Codec.fs",
+    # Framing: the envelope (docs/05, reconciled; Readiness Audit step 3)
+    "Framing/Envelope.fs",
+    # Schema: BARE's fixed vocabulary, validation, analysis, text (docs/03)
     "Schema/Definition.fs",
     "Schema/Validation.fs",
     "Schema/Analysis.fs",
-    "Schema/DSL.fs"
+    "Schema/Emit.fs",
+    "Schema/DSL.fs",
+    # Hardware: descriptors, ABI profiles, the layout validator (docs/08, docs/10)
+    "Hardware/Descriptors.fs",
+    "Hardware/Abi.fs",
+    "Hardware/Validator.fs",
+    "Hardware/Btf.fs",
+    # Memory: Region and View over the portable byte model (docs/04)
+    "Memory/Region.fs",
+    "Memory/View.fs",
+    # Platform: the description and its three observers (docs/11)
+    "Platform/Tags.fs",
+    "Platform/Description.fs",
+    "Platform/Check.fs",
+    "Platform/Manifest.fs",
+    "Platform/Obligations.fs"
 ]
+output = "barewire"
+output_kind = "library"
 
 [dependencies]
-# BAREWire uses NTUKind from FNCS - types are NOT defined locally
-# FNCS provides: NTUKind, PlatformContext, resolveSize, resolveAlign
+# None. BAREWire consumes no platform surface (docs/07): Fidelity.Platform
+# depends on BAREWire, never the reverse.

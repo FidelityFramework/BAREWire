@@ -13,41 +13,44 @@ mapping, and communication.
 
 ## Project Structure
 
-Two trees are listed below, because they differ and the difference is the point.
-Documents in this folder specify a system considerably larger than what is
-built; treating them as a description of the repository has caused confusion
-before. See [Implementation Status](./Implementation%20Status.md) for the ledger.
-
-**What exists** (`src/`, and what `BAREWire.fidproj` compiles):
+One source tree, three project files: `src/BAREWire.fidproj` (Clef, Composer), `src/BAREWire.fsproj` (.NET, referenced by Composer so the platform observers run inside the compiler), `src/BAREWire.Fable.fsproj` (JavaScript). Only the `Encoding/Substrate/` shim files differ between them. [Implementation Status](./Implementation%20Status.md) is the ledger of what each tier does and which gates it passes.
 
 ```text
-BAREWire/src/
-├── Hardware/
-│   └── Descriptors.fs     # Peripheral, field, bitfield and StructDescriptor types
-├── Encoding/
-│   ├── Memory.fs          # Memory representation and operations
-│   ├── Encoder.fs         # Encoding primitives
-│   ├── Decoder.fs         # Decoding primitives
-│   └── Codec.fs           # Combined encoding/decoding operations
-└── Schema/
-    ├── Definition.fs      # Schema type definitions
-    ├── Validation.fs      # Schema validation logic
-    ├── Analysis.fs        # Schema analysis tools
-    └── DSL.fs             # Domain-specific language for schema definition
+BAREWire/
+├── src/
+│   ├── Encoding/                 # 02: the BARE codec over bounded byte extents
+│   │   ├── Cursor.fs             #     the fault offset and bounds checks
+│   │   ├── Substrate/            #     one Text and one Float shim per compiler
+│   │   ├── Fmt.fs                #     portable number formatting for text residuals
+│   │   ├── Encoder.fs
+│   │   ├── Decoder.fs
+│   │   └── Codec.fs              #     whole-value combinators
+│   ├── Framing/
+│   │   └── Envelope.fs           # 05: kind, correlation, payload; length prefix on streams; Hello
+│   ├── Schema/                   # 03: BARE's fixed vocabulary
+│   │   ├── Definition.fs
+│   │   ├── Validation.fs
+│   │   ├── Analysis.fs           #     wire size, packed offsets, compatibility
+│   │   ├── Emit.fs               #     .bare schema text (the schema-shared artifact)
+│   │   └── DSL.fs
+│   ├── Hardware/                 # 08, 10: descriptors in fixed widths
+│   │   ├── Descriptors.fs
+│   │   ├── Abi.fs                #     ABI profiles (SysV AMD64, AAPCS, ...)
+│   │   └── Validator.fs          #     descriptor + ABI -> agreement verdict
+│   ├── Memory/                   # 04: Region and View
+│   │   ├── Region.fs
+│   │   └── View.fs
+│   └── Platform/                 # 11: the description and its observers
+│       ├── Tags.fs               #     string-alias vocabularies
+│       ├── Description.fs        #     MemorySpace, BufferSchema, BoundarySurface, Transport, ...
+│       ├── Check.fs              #     declaration consistency
+│       ├── Manifest.fs           #     the memory-map manifest (the CPU's XDC)
+│       └── Obligations.fs        #     proof obligations stated against declarations
+├── samples/RoundTrip/            # the native gate: a reachable program compiled by Composer
+└── tests/                        # the .NET gate (golden vectors) and the JavaScript differential
 ```
 
-**What the documents specify** — design only, no implementation:
-
-```text
-├── Memory/                # 04 Memory Mapping — Region, View, address calculation
-├── Network/               # 05 Network Protocol — Frame, Transport, Protocol
-├── IPC/                   # 06/07 IPC — shared memory, queues, pipes
-└── (tier modules)         # BAREWire.HSA / .CXL / .RDMA — the three scales
-```
-
-A `Core/` module is referenced by the orphaned test project and by older
-documents. It does not exist; error and core types moved out during the
-compiler-services migration.
+What the documents specify beyond this tree, design only: the transport, RPC, and streaming layers of [05](./05%20Network%20Protocol.md); the shared-memory, queue, and pipe layers of [06](./06%20IPC%20Integration.md) over Fidelity.Platform's bindings ([07](./07%20IPC%20Platform%20Specific%20APIs.md)); the cache-aware layout analysis of [09](./09%20Cache-Aware%20Layouts.md); the `.bare` schema *parser* and codec generation for foreign languages ([03](./03%20Schema%20System.md), Readiness Audit step 14).
 
 ## Core Components
 

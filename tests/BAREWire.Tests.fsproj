@@ -1,31 +1,32 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The .NET test gate: a zero-dependency console runner. Golden-frame vectors
+       (byte-exact BARE encodings), envelope round trips, validator verdicts, and
+       platform-description observers. Run with dotnet run on this project;
+       a non-zero exit is a failure. The transcript it prints for the RoundTrip sample's
+       inputs is compared with the native sample's output (docs/12 §5). -->
+
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
-    <GenerateProgramFile>false</GenerateProgramFile>
+    <TargetFramework>net10.0</TargetFramework>
+    <NoWarn>FS0051</NoWarn>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Core\TypesTests.fs" />
-    <Compile Include="Core\MemoryTests.fs" />
-    <Compile Include="Core\BinaryTests.fs" />
-    <Compile Include="Core\ErrorTests.fs" />
-    <Compile Include="Core\TimeTests.fs" />
-    <Compile Include="Core\Utf8Tests.fs" />
-    <Compile Include="Core\UuidTests.fs" />
+    <Compile Include="Harness.fs" />
+    <Compile Include="EncodingTests.fs" />
+    <Compile Include="FramingTests.fs" />
+    <Compile Include="SchemaTests.fs" />
+    <Compile Include="HardwareTests.fs" />
+    <Compile Include="MemoryTests.fs" />
+    <Compile Include="PlatformTests.fs" />
+    <Compile Include="TranscriptTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\BAREWire.fsproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Expecto" Version="9.0.4" />
-    <PackageReference Include="FSharp.UMX" Version="1.1.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.4.1" />
-    <PackageReference Include="YoloDev.Expecto.TestSdk" Version="0.13.3" />
+    <ProjectReference Include="../src/BAREWire.fsproj" />
   </ItemGroup>
 
 </Project>

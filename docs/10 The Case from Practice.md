@@ -176,9 +176,11 @@ NPU, orchestration on the CPU — all from one Clef source. Its README already
 names BAREWire as the protocol connecting the actors and the FPGA sidecar.
 
 The FPGA link is **Layer 2 Ethernet over RJ45** — an Arty A7-100T beside a
-Strix Halo host — bridged through eBPF (or wBPF). *(ThreeBody's README still
-describes a USB-C sidecar. That is out of date; USB-C does not serve this
-role.)* With that transport, a single demo spans:
+Strix Halo host — bridged on the host by an XDP program into AF_XDP rings
+(`ThreeBody/docs/fpga-transport.md` records why: the board's USB port fronts an
+FTDI UART whose latency timer sets a 1 ms floor). What that asks of this
+library is in [11](./11%20Platform%20Description.md) §"The kernel as a
+described platform". With that transport, a single demo spans:
 
 | phase | boundary in ThreeBody |
 | --- | --- |

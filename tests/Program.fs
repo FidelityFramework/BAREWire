@@ -1,7 +1,12 @@
 module BAREWire.Tests.Program
 
-open Expecto
-
-let main args =
-    // Run all tests in the assembly
-    runTestsInAssembly defaultConfig args
+[<EntryPoint>]
+let main _ =
+    BAREWire.Tests.EncodingTests.run ()
+    BAREWire.Tests.FramingTests.run ()
+    BAREWire.Tests.SchemaTests.run ()
+    BAREWire.Tests.HardwareTests.run ()
+    BAREWire.Tests.MemoryTests.run ()
+    BAREWire.Tests.PlatformTests.run ()
+    BAREWire.Tests.TranscriptTests.run ()
+    BAREWire.Tests.Harness.summary ()

@@ -1,85 +1,28 @@
 # Implementation Status
 
-One ledger, so the documents in this folder are not mistaken for a description
-of the repository. Most of them are **design specifications**, and several
-specify modules that have never existed. That is legitimate — the designs are
-the useful output of the work so far — but it needs saying in one place.
+Assessed 2026-09-03 against `src/`, after the rebuild the [Readiness Audit](./Readiness%20Audit.md) planned. The documents specify the system; this ledger says which parts are built and which gates each passes. Three gates: **.NET** (`dotnet run --project tests/BAREWire.Tests.fsproj`, 234 checks), **JavaScript** (`fable src/BAREWire.Fable.fsproj`, then `node tests/js/roundtrip.mjs` and `node tests/js/tiers.mjs`, the latter dispatching the platform obligations to cvc5 from the JavaScript build), and **native** (`samples/RoundTrip` compiled by Composer and run). The native gate is blocked on the Composer snapshot HelloProof pins by the compiler-surface gaps [12 Intersection Subset](./12%20Intersection%20Subset.md) records; a compiler lane is closing them with regression samples, and the rebuilt Composer is the acceptance target.
 
-Assessed 2026-08-04 against `src/` and `src/BAREWire.fidproj`.
-
-## Ledger
-
-| Area | Document | State |
-|---|---|---|
-| Substrate reading | [Substrate_Formalism](./Substrate_Formalism.md) | Position. Current and load-bearing. |
-| Platform description | [11 Platform Description](./11%20Platform%20Description.md) | Position. Current (2026-08-31): the inward reading — declared layout authority for all processors, generalized from the FPGA path. Direction, not code. |
+| Concern | Document | Status |
+| --- | --- | --- |
+| Substrate reading, the two missions | [Substrate_Formalism](./Substrate_Formalism.md) | Position. Current; the missions ranked (2026-09-03). |
+| Platform description, the inward reading | [11 Platform Description](./11%20Platform%20Description.md) | Position and now vocabulary: `src/Platform/` implements the description and its three observers; the kernel section (eBPF, wBPF, ThreeBody) is represented and nominally covered. |
 | Evidence for the role | [10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) | Position. Current. |
-| Encoding | [02 Encoding and Decoding Engine](./02%20Encoding%20and%20Decoding%20Engine.md) | **Source exists** — `Encoding/{Memory,Encoder,Decoder,Codec}.fs`. Unbuilt (see below). |
-| Schema | [03 Schema System](./03%20Schema%20System.md) | **Source exists** — `Schema/{Definition,Validation,Analysis,DSL}.fs`. Unbuilt. |
-| Hardware descriptors | [08 Hardware Descriptors](./08%20Hardware%20Descriptors.md) | Types exist in `Hardware/Descriptors.fs`; document says PLANNED and that is accurate — there is a `create`, no validator, no consumer. |
-| Memory mapping | [04 Memory Mapping](./04%20Memory%20Mapping.md) | **Design only.** No `Memory/` directory. Region and View do not exist. |
-| Network protocol | [05 Network Protocol](./05%20Network%20Protocol.md) | **Design only.** No `Network/` directory. |
-| IPC | [06](./06%20IPC%20Integration.md), [07](./07%20IPC%20Platform%20Specific%20APIs.md) | **Design only.** No `IPC/` directory. |
-| Cache-aware layouts | [09 Cache-Aware Layouts](./09%20Cache-Aware%20Layouts.md) | **Design only.** |
-| Arena | [Arena_Design](./Arena_Design.md) | **Implemented elsewhere** — elevated to a compiler intrinsic. This document is the authoritative design reference; the code is not here. |
-| Tier modules (HSA / CXL / RDMA) | described on the language site | **Design only**, and described there as planned. |
+| Compiler-facing rules and gates | [12 Intersection Subset](./12%20Intersection%20Subset.md) | Current; every rule verified or documented, with a preferred spelling and a repro. |
+| Encoding | [02 Encoding and Decoding Engine](./02%20Encoding%20and%20Decoding%20Engine.md) | **Built.** `src/Encoding/`: threaded offsets, fault sentinel, full primitive and aggregate coverage, whole-value combinators, per-substrate shims. Gates: .NET (golden vectors), JavaScript (byte-identical). Native: type-checks; run blocked (`array-length`, `if-argument`). |
+| Framing | [05 Network Protocol](./05%20Network%20Protocol.md) (envelope adopted) | **Built.** `src/Framing/Envelope.fs`: kind, correlation, payload; stream length prefix; Hello. Gates: .NET, JavaScript. Transports, RPC, streaming: design. |
+| Schema | [03 Schema System](./03%20Schema%20System.md) | **Built.** `src/Schema/`: BARE's fixed vocabulary, validation, wire size, packed offsets, compatibility, `.bare` text emission. Gates: .NET, JavaScript. Native blocked (`recursive-union`). Not built: a `.bare` parser, codec generation. |
+| Hardware descriptors and the validator | [08 Hardware Descriptors](./08%20Hardware%20Descriptors.md) | **Built.** `src/Hardware/`: descriptors in fixed widths with counts, ABI profiles, `Validator.derive`/`validate`/`explain`, `Layout.isPointerFree`, BTF emitter and reader (`bpftool btf dump` confirms). Gates: .NET, JavaScript. Native blocked (`record-arrays`). |
+| Memory mapping | [04 Memory Mapping](./04%20Memory%20Mapping.md) | **Built (portable byte model).** `src/Memory/`: `Region` bounded extents, `View` typed by a descriptor layout. Gates: .NET, JavaScript. Native memref realization, shared memory, mapped files: design over Fidelity.Platform bindings. |
+| Platform description and observers | [11 Platform Description](./11%20Platform%20Description.md) | **Built.** `src/Platform/`: `MemorySpace` (with map kinds and availability), `BoundarySurface`/`Endpoint` (with availability), `BufferSchema` (fixed, length-prefixed, delimited, capped, ring), `Transport`, `LifecycleFacts`, `TargetCore`, `Limits`; `Check.run`/`runWithLayouts`, `Manifest.emit`, `Obligations.ofDescription`/`smtLib`/`ledgerLine`. Gates: .NET with cvc5 (`unsat` on every generated obligation for a Linux x86_64, an eBPF, and a ThreeBody description; `sat` on the inconsistent ones). Native blocked (`string-constant`, `string-equality`). |
+| IPC | [06 IPC Integration](./06%20IPC%20Integration.md), [07](./07%20IPC%20Platform%20Specific%20APIs.md) | Design. The envelope and the first shared-memory layouts (maps, rings) are declared in the tiers above; the OS bindings are Fidelity.Platform's. |
+| Cache-aware layouts | [09 Cache-Aware Layouts](./09%20Cache-Aware%20Layouts.md) | Design. The ABI profiles carry natural alignment; cache-line facts and false-sharing analysis are not built. |
+| Arena | [Arena_Design](./Arena_Design.md) | Design reference; implemented as a compiler intrinsic. The arena space is declared in the platform description. |
+| Eliminating .NET dependencies | [99](./99%20Elminating%20Dotnet%20Dependencies.md) | Historical memo; the shim design in 12 §4 is the current form. |
 
-## Blockers, in the order they bind
+## What lands next (Readiness Audit §4)
 
-**1. The project does not build.** `src/BAREWire.fidproj` has no
-`[compilation] target`, so Composer rejects it before reading any source — both
-the pinned March build and HEAD. Its `[dependencies]` section is comments only
-while stating that `NTUKind` comes from **FNCS**, the F# Native Compiler
-Service, which the framework has moved off. Names throughout the repository
-still refer to **Firefly** (now Composer) and FNCS (now Clef Compiler Services).
-
-**2. The contract it must satisfy is an open question.**
-`clef-lang-spec/spec/ntu-dimensional-architecture.md` §7.3 asks how CCS verifies
-that both sides of a BAREWire contract are dimensionally consistent, and
-observes that layouts likely need **Fixed** dimensions rather than **Resolved**
-ones, because two endpoints may resolve the same dimension differently.
-`grade-discipline.md` raises the identical question for multivector blade
-support and notes the resolution is probably the same. **A schema cannot mean
-anything across a boundary until this closes**, and no amount of implementation
-substitutes for closing it.
-
-**3. Its safety mechanism is downstream of measures — resolved at the type-theoretic level, open at the source level.** The README's claim is compile-time memory safety via units of measure, and the sources still carry it as `FSharp.UMX` phantom types. The type-theoretic question is settled: there is no UMX library and no UMX-extended on the native path — the measure discipline is wholly the native type universe's dimensional structure (Kennedy's frame as the type system itself; `clef-lang-spec/spec/native-type-universe.md`, `ntu-dimensional-architecture.md`). What remains is migrating the sources off UMX idioms onto NTU measures, which folds into the Clef migration of blocker 1. BAREWire rides the NTU; it no longer waits on a survival question.
-
-**4. The test suite is orphaned.** `tests/BAREWire.Tests.fsproj` references
-`..\src\BAREWire.fsproj`, which does not exist — only `BAREWire.fidproj` does —
-and its test files target `src/Core/*`, a directory removed during the
-compiler-services migration. The suite cannot build and has not been exercised
-against the current tree.
-
-## What is worth building first
-
-Not Region and View, despite being the largest specified gap.
-
-The [case from practice](./10%20The%20Case%20from%20Practice.md) points at a
-**validator for `StructDescriptor`**: something that takes a descriptor and a
-target ABI and answers whether they agree. Farscape needs it to stop emitting
-bindings that type-check and are wrong at the ABI; HelloWayland needs it to stop
-hand-padding HIP descriptors. It is useful before Region/View exists, it is
-small, and it exercises the contract question in §7.3 on a concrete case rather
-than in the abstract.
-
-## Sequencing
-
-```text
-measures proven on the native path
-        │
-        ▼
-   §7.3 closed  (Fixed vs Resolved for boundary layouts)
-        │
-        ▼
-   StructDescriptor validator   ◄── first real code; unblocks Farscape
-        │
-        ▼
-   Region / View  (04)          ◄── the mapping half
-        │
-        ▼
-   tier modules  (HSA / CXL / RDMA)
-```
-
-Rescaffolding the build (blocker 1) is independent and can happen at any point;
-it just should not be mistaken for progress on the other three.
+- Step 11: the Linux x86_64 description as a value in `Fidelity.Platform/CPU/Linux/x86_64/Description.clef`, with `consoleReadln` declaring the capacity `Console.clef` names once.
+- Steps 10 and 13: Composer's `PlatformDescriptionResolution` coeffect, the `memory_map.manifest` residual, and obligations from the declaration in both dispatches (`06b` for cvc5 at design time, `09` in the `smt` dialect for cvc5 at build time), replacing the `1024L` literals in `pSysReadline`.
+- The compiler lane: the surface gaps in 12, each with a regression sample, so `samples/RoundTrip` runs and the native transcript joins the differential.
+- Step 9: Fidelity.Platform's contracts as an alias layer over `src/Platform`, and the Arty description's memory spaces.
+- Step 14: a `.bare` parser and codec generation. Step 15: measures on the wire.
