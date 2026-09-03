@@ -196,7 +196,7 @@ dominates: a close-encounter regime hands work to the FPGA and needs the answer
 back inside a timestep, so round-trip cost matters more than bandwidth. Raw
 Layer 2 with no IP stack is the lowest-latency path available short of PCIe.
 **A contract that costs a serialization pass on every crossing is not viable at
-that budget** — which is precisely why the typed-contract reading matters more
+that budget** — which is precisely why the typed contract reading matters more
 than the encoding one. What has to survive the wire is meaning, and the cheapest
 encoding that preserves it wins.
 
@@ -226,8 +226,8 @@ in a real system rather than as an illustration.
 eBPF carries its own memory-safety discipline: programs are checked by an
 in-kernel verifier before they are permitted to run. So the crossing is not
 merely between two type systems but between **two verification regimes** —
-Clef's dimensional guarantees on one side, the eBPF verifier's on the other,
-with BAREWire's typed contract as the thing that must compose with both.
+Clef's dimensional guarantees and PSG/MLIR-SMT verifications on one side, the eBPF verifier's on the other,
+with BAREWire's contract as the thing that must compose with both.
 
 That is where "how memory safety is conceptually framed and mechanically
 enacted" gets an answer with teeth. A typed contract that survives a kernel

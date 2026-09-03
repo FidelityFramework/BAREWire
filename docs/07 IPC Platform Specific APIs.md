@@ -2,7 +2,7 @@
 
 ## 1. The Cross-Platform Question
 
-BAREWire's IPC design ([06 IPC Integration](./06%20IPC%20Integration.md)) specifies shared memory, named pipes, and message queues over operating-system primitives that differ per platform. This memo states how platform specificity is resolved in the Fidelity Framework — **at compile time, in source, with nothing selected at runtime** — and where the seam sits: **the OS-primitive binding layer belongs to Fidelity.Platform, not to BAREWire.** BAREWire's remit at this seam is the same as everywhere else: the typed contract and the layout — schemas, descriptors, and typed regions and views over whatever handle or mapped region the platform tree provides. BAREWire consumes the platform surface; it never binds it.
+BAREWire's IPC design ([06 IPC Integration](./06%20IPC%20Integration.md)) specifies shared memory, named pipes, and message queues over operating-system primitives that differ per platform. This memo states how platform specificity is resolved in the Fidelity Framework — **at compile time, in source, with nothing selected at runtime** — and where the seam sits: **the OS-primitive binding layer belongs to Fidelity.Platform, not to BAREWire.** BAREWire's remit at this seam is the same as everywhere else: the typed contract and the layout — schemas, descriptors, and structured regions and views over whatever handle or mapped region the platform tree provides. BAREWire consumes the platform surface; it never binds it.
 
 There is no provider interface, no runtime registry, and no platform detection. A native binary does not discover its platform; it is compiled for one. The target is declared in the project (`.fidproj`), the per-target platform source tree supplies the bindings, and the compiler resolves every platform call to a direct native call before emission.
 
@@ -40,7 +40,7 @@ For platform APIs that live in shared libraries rather than the syscall interfac
 
 ## 3. Per-Target Binding Surfaces for IPC
 
-The IPC design rests on these OS primitives per target. The facts in these tables are stable properties of the operating systems; the per-target **Fidelity.Platform** trees are where they become typed Clef surfaces — none of these bindings live in BAREWire.
+The IPC design rests on these OS primitives per target. The facts in these tables are stable properties of the operating systems; the per-target **Fidelity.Platform** trees are where they become type-carrying Clef surfaces — none of these bindings live in BAREWire.
 
 **Linux / POSIX** (direct syscalls and libc):
 
@@ -78,7 +78,7 @@ let createSharedMemory (name: string) (size: int<bytes>) : Result<SharedHandle, 
                 Ok { Fd = fd; Base = addr; Size = size }
 ```
 
-BAREWire's IPC modules ([06](./06%20IPC%20Integration.md)) sit on these surfaces: the schema and view layers are platform-independent, and the binding layer that differs per target is Fidelity.Platform's. The layout the two processes agree on is the BAREWire schema — the typed contract of [Substrate_Formalism](./Substrate_Formalism.md) — not the transport.
+BAREWire's IPC modules ([06](./06%20IPC%20Integration.md)) sit on these surfaces: the schema and view layers are platform-independent, and the binding layer that differs per target is Fidelity.Platform's. The layout the two processes agree on is the BAREWire schema — the structured contract of [Substrate_Formalism](./Substrate_Formalism.md) — not the transport.
 
 ## 4. Resource Management
 

@@ -27,7 +27,7 @@ FNCS NTUKind — no local type system. BAREWire compiles via fidproj with Compos
 ### Not Yet Implemented (Access Layer)
 - No volatile read/write primitives — these are CCS/Alex concerns, not BAREWire
   (CCS has `NTUMemorySpace.Peripheral` defined; Alex witness wiring is the remaining gap)
-- No `PeripheralView` type binding descriptor + base address into typed accessor
+- No `PeripheralView` type binding descriptor + base address into the accessor
 - No memory map descriptor composing multiple peripherals with chip address ranges
 - No interrupt vector table descriptor (vector tables handled via `[<VectorTable>]` attribute in Clef)
 
