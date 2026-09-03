@@ -60,7 +60,8 @@ let run () =
     let findings = Check.run orphan
     check "capacity beyond space is a finding" (findings |> Array.exists (fun f -> f.Kind = FindingKind.CapacityExceedsSpace)) (Check.explain findings)
     let orphanObs = Obligations.ofDescription orphan |> Array.filter (fun o -> o.Id = "capacity_orphan")
-    equal "capacity beyond space is refutable" "sat" (cvc5 orphanObs.[0])
+    equal "orphan capacity obligation exists" 1 (Array.length orphanObs)
+    if Array.length orphanObs = 1 then equal "capacity beyond space is refutable" "sat" (cvc5 orphanObs.[0])
 
     // ---- eBPF: the kernel as a described platform (nominal coverage) ----
     let helpers =
@@ -70,8 +71,8 @@ let run () =
             Endpoint.helper "bpf_loop" 181 "5.17" [||] |]
     let hooks =
         BoundarySurface.create "hooks" SurfaceKind.HostApi [|
-            Endpoint.create "xdp" EndpointKind.Symbol "xdp_md -> xdp_action" [||]
-            Endpoint.withAvailability (Endpoint.create "lsm" EndpointKind.Symbol "lsm_ctx -> errno" [||]) "5.7" "" |]
+            Endpoint.hook "xdp" "xdp_md -> xdp_action" ""
+            Endpoint.hook "lsm" "lsm_ctx -> errno" "5.7" |]
     let kernel : PlatformDescription =
         { Id = "bpf-linux-6.x"; DisplayName = "Linux kernel 6.x, eBPF surface"; Substrate = "Kernel"; Core = None
           Spaces = [|
@@ -95,8 +96,20 @@ let run () =
     equal "until bounds" false (Availability.admits "5.8" "6.0" "6.2")
     let km = Manifest.emit kernel
     check "manifest map kind" (km.Contains "space counters kind=map capacity=4096 align=8 granularity=1 growth=fixed access=rw base=dynamic mapkind=per-cpu-array") km
-    check "manifest helper since" (km.Contains "endpoint bpf_loop location=symbol address=181 since=5.17 until=none") km
+    check "manifest helper since" (km.Contains "endpoint bpf_loop location=helper-number address=181 signature=none since=5.17 until=none") km
+    check "manifest hook signature" (km.Contains "endpoint xdp location=symbol address=xdp signature=xdp_md -> xdp_action") km
+    let misalignedBase = { linux with Spaces = [| MemorySpace.withBase (MemorySpace.create "odd" MemoryKind.Rodata 4096L 4096) 0x401010L |] }
+    check "base must respect its alignment" (Check.run misalignedBase |> Array.exists (fun f -> f.Kind = FindingKind.BaseMisaligned)) (Check.explain (Check.run misalignedBase))
+    let twoSurfaces = { linux with Surfaces = [| BoundarySurface.create "a" SurfaceKind.Syscall [| Endpoint.syscall "read" 0 [||] |]; BoundarySurface.create "b" SurfaceKind.HostApi [| Endpoint.hook "read" "" "" |] |] }
+    check "endpoint names are unique across surfaces" (Check.run twoSurfaces |> Array.exists (fun f -> f.Kind = FindingKind.DuplicateName)) (Check.explain (Check.run twoSurfaces))
     check "manifest limits" (km.Contains "limit stack-bytes value=512") km
+    check "manifest ring slot" (km.Contains "framing=ring delimiter=none trim=false space=events lifetime=session access=rw slot=64") km
+    let badRing = { kernel with Buffers = [| BufferSchema.ring "r" "Event" 100L 64 "events" |] }
+    check "ring slot must divide the capacity" (Check.run badRing |> Array.exists (fun f -> f.Kind = FindingKind.InvalidSlot)) (Check.explain (Check.run badRing))
+    // slug collisions get distinct anchors
+    let twins = { linux with Buffers = [| BufferSchema.fixed' "console-readln" "str" 8L "arena"; BufferSchema.fixed' "Console Readln" "str" 8L "arena" |] }
+    let twinIds = Obligations.ofDescription twins |> Array.map (fun o -> o.Id)
+    equal "distinct anchors for colliding slugs" (Array.length twinIds) (Array.length (Array.distinct twinIds))
     let kobs = Obligations.ofDescription kernel
     let kids = kobs |> Array.map (fun o -> o.Id)
     check "stack within the verifier limit" (Array.contains "stack_within_limit_stack" kids) (String.concat "," kids)
@@ -135,10 +148,11 @@ let run () =
     let tobs = Obligations.ofDescription l2
     let fit = tobs |> Array.filter (fun o -> o.Id = "fits_layer2_closeencounter")
     equal "frame-fits-unit obligation exists" 1 (Array.length fit)
-    equal "cvc5 frame fits an Ethernet unit" "unsat" (cvc5 fit.[0])
+    if Array.length fit = 1 then equal "cvc5 frame fits an Ethernet unit" "unsat" (cvc5 fit.[0])
     let oversize = { l2 with Buffers = [| BufferSchema.fixed' "closeEncounter" "CloseEncounterFrame" 2048L "umem" |] }
     let bad = Obligations.ofDescription oversize |> Array.filter (fun o -> o.Id = "fits_layer2_closeencounter")
-    equal "cvc5 refutes an oversize frame" "sat" (cvc5 bad.[0])
+    equal "oversize frame obligation exists" 1 (Array.length bad)
+    if Array.length bad = 1 then equal "cvc5 refutes an oversize frame" "sat" (cvc5 bad.[0])
     // and the frame's BTF, so the kernel-side redirect program can name it
     let blob = Btf.emit abi [| frame |]
     let image = Btf.read blob

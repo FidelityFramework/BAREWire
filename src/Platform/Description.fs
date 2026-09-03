@@ -1,5 +1,7 @@
 namespace BAREWire.Platform
 
+open BAREWire.Encoding
+
 /// The platform description: the declared authority on memory layout,
 /// boundary surfaces, buffer capacities, and transports for one processor
 /// (docs/11). A Fidelity.Platform target tree is one `PlatformDescription`
@@ -50,6 +52,10 @@ type Endpoint = {
     Location: EndpointKind
     Address: string
     Contracts: Contract array
+    /// The endpoint's signature where one is declared: a hook's context type
+    /// and return convention (`xdp_md -> xdp_action`), a helper's parameter
+    /// list, a syscall's argument shape; "" when none.
+    Signature: string
     /// Host version from which the endpoint exists (a helper that arrived in
     /// kernel 5.17 is `Since = "5.17"`); "" when unbounded.
     Since: string
@@ -89,6 +95,8 @@ type BufferSchema = {
     Space: string
     Lifetime: Lifetime
     Access: Access
+    /// For `Ring` framing, the slot size in bytes; 0 otherwise.
+    Slot: int
 }
 
 /// A transport: the medium, the endpoints it binds (by endpoint name), its
@@ -144,14 +152,15 @@ type TargetCore = {
     CpuModel: string
 }
 
-/// The whole description of one platform. `Core` is `None` for a platform
-/// with no processor core to describe (an FPGA fabric).
 /// One named numeric limit the host imposes.
 type Limit = {
     Name: string
     Value: int64
 }
 
+/// The whole description of one processor: identity, the core's ISA facts
+/// when it has a core, and the declared spaces, surfaces, buffers, transports,
+/// lifecycle, and limits the three observers read.
 type PlatformDescription = {
     Id: string
     DisplayName: string
@@ -316,12 +325,12 @@ module Availability =
         let mutable fin = false
         while not fin do
             let mutable va = 0
-            while ia < la && a.[ia] >= '0' && a.[ia] <= '9' do
-                va <- va * 10 + (int a.[ia] - 48)
+            while ia < la && Text.charAt a ia >= '0' && Text.charAt a ia <= '9' do
+                va <- va * 10 + (int (Text.charAt a ia) - 48)
                 ia <- ia + 1
             let mutable vb = 0
-            while ib < lb && b.[ib] >= '0' && b.[ib] <= '9' do
-                vb <- vb * 10 + (int b.[ib] - 48)
+            while ib < lb && Text.charAt b ib >= '0' && Text.charAt b ib <= '9' do
+                vb <- vb * 10 + (int (Text.charAt b ib) - 48)
                 ib <- ib + 1
             result <- (if va < vb then -1 elif va > vb then 1 else 0)
             let moreA = ia < la
@@ -401,29 +410,29 @@ module BufferSchema =
     /// with a prime because `fixed` is a keyword.)
     let fixed' (name: string) (schema: string) (capacity: int64) (space: string) : BufferSchema =
         { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.Fixed; Delimiter = -1
-          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite }
+          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite; Slot = 0 }
 
     /// A buffer whose content carries a length prefix.
     let lengthPrefixed (name: string) (schema: string) (capacity: int64) (space: string) : BufferSchema =
         { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.LengthPrefixed; Delimiter = -1
-          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite }
+          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite; Slot = 0 }
 
     /// A buffer whose content ends at a delimiter byte, dropped when `trim`.
     let delimited (name: string) (schema: string) (capacity: int64) (delimiter: int) (trim: bool) (space: string) : BufferSchema =
         { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.Delimited; Delimiter = delimiter
-          TrimDelimiter = trim; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite }
+          TrimDelimiter = trim; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite; Slot = 0 }
 
     /// A ring of fixed slots over a space of kind Ring: `capacity` is the ring
     /// size in bytes, `slot` the slot size, consumed through producer and
-    /// consumer indices. `Delimiter` carries the slot size.
+    /// consumer indices.
     let ring (name: string) (schema: string) (capacity: int64) (slot: int) (space: string) : BufferSchema =
-        { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.Ring; Delimiter = slot
-          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Session; Access = Access.ReadWrite }
+        { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.Ring; Delimiter = -1
+          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Session; Access = Access.ReadWrite; Slot = slot }
 
     /// A buffer bounded only by its capacity, with no in-band marker.
     let capped (name: string) (schema: string) (capacity: int64) (space: string) : BufferSchema =
         { Name = name; Schema = schema; Capacity = capacity; Framing = Framing.Capped; Delimiter = -1
-          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite }
+          TrimDelimiter = false; Space = space; Lifetime = Lifetime.Scope; Access = Access.ReadWrite; Slot = 0 }
 
     /// The same buffer with a lifetime.
     let withLifetime (buffer: BufferSchema) (lifetime: Lifetime) : BufferSchema =
@@ -454,20 +463,30 @@ module Endpoint =
 
     /// An endpoint at a location with its contracts.
     let create (name: string) (location: EndpointKind) (address: string) (contracts: Contract array) : Endpoint =
-        { Name = name; Location = location; Address = address; Contracts = contracts; Since = ""; Until = "" }
+        { Name = name; Location = location; Address = address; Contracts = contracts; Signature = ""; Since = ""; Until = "" }
 
     /// A syscall endpoint: the number as text, with its contracts.
     let syscall (name: string) (number: int) (contracts: Contract array) : Endpoint =
-        { Name = name; Location = EndpointKind.SyscallNumber; Address = BAREWire.Encoding.Fmt.ofInt number; Contracts = contracts; Since = ""; Until = "" }
+        { Name = name; Location = EndpointKind.SyscallNumber; Address = BAREWire.Encoding.Fmt.ofInt number; Contracts = contracts; Signature = ""; Since = ""; Until = "" }
 
-    /// A helper or hook on a host API surface, by symbol, available from a
-    /// host version: the BPF helper table's shape.
+    /// A numbered host helper, available from a host version: the BPF helper
+    /// table's shape. The address is the helper number as text.
     let helper (name: string) (number: int) (since: string) (contracts: Contract array) : Endpoint =
-        { Name = name; Location = EndpointKind.Symbol; Address = BAREWire.Encoding.Fmt.ofInt number; Contracts = contracts; Since = since; Until = "" }
+        { Name = name; Location = EndpointKind.HelperNumber; Address = BAREWire.Encoding.Fmt.ofInt number; Contracts = contracts; Signature = ""; Since = since; Until = "" }
 
     /// The same endpoint available from `since` until `until` ("" unbounded).
     let withAvailability (endpoint: Endpoint) (since: string) (until: string) : Endpoint =
         { endpoint with Since = since; Until = until }
+
+    /// The same endpoint with a declared signature.
+    let withSignature (endpoint: Endpoint) (signature: string) : Endpoint =
+        { endpoint with Signature = signature }
+
+    /// An attach point on a host API surface: a hook is a pin (docs/11). The
+    /// signature is the context type it hands the program and the return
+    /// convention it expects, as text.
+    let hook (name: string) (signature: string) (since: string) : Endpoint =
+        { Name = name; Location = EndpointKind.Symbol; Address = name; Contracts = Array.zeroCreate 0; Signature = signature; Since = since; Until = "" }
 
 /// Constructors for boundary surfaces.
 module BoundarySurface =
@@ -531,7 +550,10 @@ module Lifecycle =
     let reset (name: string) (external: bool) (activeHigh: bool) : Reset =
         { Name = name; External = external; ActiveHigh = activeHigh }
 
-/// Constructors for the core identity block.
+/// Constructors for the core identity block. The block follows
+/// Fidelity.Platform's `CANONICAL_PLATFORM_SPEC.md` `TargetCore`; its two
+/// optional fields (`TripleOverride`, `CpuModel`) are flat strings here, ""
+/// when derived by the toolchain, so the record stays a plain table.
 module TargetCore =
 
     /// A core with the toolchain deriving the triple and CPU model.

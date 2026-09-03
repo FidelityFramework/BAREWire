@@ -60,8 +60,10 @@ module ObligationKind =
     [<Literal>]
     let MemoryMapDisjointness: string = "memory-map-disjointness"
     /// A buffer carried by a transport fits the transport's largest unit.
+    [<Literal>]
     let TransportUnit: string = "transport-unit"
     /// A space of kind Stack fits the host's declared stack-bytes limit.
+    [<Literal>]
     let SpaceLimit: string = "space-limit"
 
 /// The third observer of the description (docs/11, "Three observers, one
@@ -153,7 +155,7 @@ module Obligations =
                 { Id = Text.append "input_bound_" s
                   Kind = ObligationKind.InputBufferBound
                   Logic = Logic.QfLia
-                  Statement = Text.append (Text.append (Text.append (Text.append "the count handed to the reader of " b.Name) " (") cap) (Text.append (Text.append ") is at most its allocation (" cap) ")")
+                  Statement = Text.append (Text.append (Text.append (Text.append "the count handed to the reader of " b.Name) " is its declared capacity (") cap) (Text.append (Text.append "), so the reader writes at most the allocation the same declaration sizes (" cap) ")")
                   Source = source desc b.Name
                   Refs = [| "CWE-120" |]
                   Form = scalar FormKind.Leq b.Capacity b.Capacity }
@@ -255,6 +257,25 @@ module Obligations =
                 i <- i + 1
         out
 
+    /// Two names can share a slug ("Console Readln" and "console-readln"); a
+    /// repeated id gets `_2`, `_3`, ... so every anchor is unique.
+    let private dedupeIds (obs: Obligation array) : Obligation array =
+        let n = Array.length obs
+        let out : Obligation array = Array.zeroCreate n
+        let mutable i = 0
+        while i < n do
+            let o = Array.get obs i
+            let mutable seen = 0
+            let mutable j = 0
+            while j < i do
+                if (Array.get obs j).Id = o.Id then
+                    seen <- seen + 1
+                j <- j + 1
+            let id = if seen = 0 then o.Id else Text.append (Text.append o.Id "_") (Fmt.ofInt (seen + 1))
+            Array.set out i { o with Id = id }
+            i <- i + 1
+        out
+
     /// Every obligation the description supports, in declaration order:
     /// buffers first (capacity, then the input bounds of a trimmed delimited
     /// buffer), then transports (each carried buffer fits the unit), then the
@@ -292,7 +313,8 @@ module Obligations =
                 Array.set based w s
                 w <- w + 1
             k <- k + 1
-        if basedCount > 0 then push acc (disjointObligation desc based) else acc
+        let all = if basedCount > 0 then push acc (disjointObligation desc based) else acc
+        dedupeIds all
 
     /// An SMT-LIB integer numeral; negatives are written `(- n)`.
     let private smtInt (v: int64) : string =

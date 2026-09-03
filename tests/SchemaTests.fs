@@ -32,11 +32,24 @@ let run () =
     check "cyclic struct reported" (Array.contains ValidationErrorKind.CyclicTypeReference kinds) (String.concat "," kinds)
     check "undefined type reported" (Array.contains ValidationErrorKind.UndefinedType kinds) (String.concat "," kinds)
 
-    // legal indirection: a list of self is fine in BARE
+    // BARE forbids a type defined in terms of itself by any route, a list included
     let tree =
         SchemaDSL.schema "Node"
         |> SchemaDSL.withType "Node" (SchemaDSL.struct' [| SchemaDSL.field "children" (SchemaDSL.list (SchemaDSL.typeRef "Node")) |])
-    equal "recursion through list is legal" 0 (Array.length (Validation.validate tree))
+    check "recursion through list is refused" (Validation.validate tree |> Array.exists (fun e -> e.Kind = ValidationErrorKind.CyclicTypeReference)) "no cycle reported"
+    // a bare void declaration used as a union case is legal; a negative tag and a repeated case type are not
+    let voidCase =
+        SchemaDSL.schema "E"
+        |> SchemaDSL.withType "Nothing" SchemaDSL.void'
+        |> SchemaDSL.withType "E" (SchemaDSL.union [| SchemaDSL.case 0 (SchemaDSL.typeRef "Nothing"); SchemaDSL.case 1 SchemaDSL.u8 |])
+    equal "void via a named type in a union is legal" 0 (Array.length (Validation.validate voidCase))
+    let badUnion = SchemaDSL.schema "U" |> SchemaDSL.withType "U" (SchemaDSL.union [| SchemaDSL.case -1 SchemaDSL.u8; SchemaDSL.case 1 SchemaDSL.u8 |])
+    let badKinds = Validation.validate badUnion |> Array.map (fun e -> e.Kind)
+    check "negative tag refused" (Array.contains ValidationErrorKind.InvalidTag badKinds) (String.concat "," badKinds)
+    check "duplicate case type refused" (Array.contains ValidationErrorKind.DuplicateCaseType badKinds) (String.concat "," badKinds)
+    // enums encode as uint whatever the base
+    let es8 = Analysis.wireSize messaging (SchemaDSL.enumWith PrimKind.U8 [| Bare.enumValue "A" 0UL |])
+    equal "enum over u8 still sizes as a varint" false es8.IsFixed
 
     // wire sizes
     let header = SchemaDSL.struct' [| SchemaDSL.field "a" SchemaDSL.u8; SchemaDSL.field "b" SchemaDSL.u16; SchemaDSL.field "c" SchemaDSL.u32 |]
@@ -62,6 +75,8 @@ let run () =
     equal "removed case is forward compatible" Compatibility.Forward (Analysis.compatibility v2 v1)
 
     // the interchange text
+    let fixedText = Emit.typeText messaging (SchemaDSL.fixedData 16)
+    equal "fixed data uses BARE's bracket form" "data[16]" fixedText
     let text = Emit.schema messaging
     check "emit names the root struct" (text.Contains "type Message struct {") text
     check "emit writes the optional" (text.Contains "type Attachment optional<data>") text

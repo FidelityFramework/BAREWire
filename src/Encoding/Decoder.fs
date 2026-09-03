@@ -84,7 +84,9 @@ module Decoder =
             let ok = Cursor.fits data pos 1
             let b = if ok then Array.get data pos else 0uy
             let more = ok && (b &&& 128uy) <> 0uy
-            let overflow = more && shift >= 63
+            // The tenth byte may carry only bit 0: a continuation bit or any
+            // of bits 1..6 encodes a value beyond 64 bits.
+            let overflow = shift >= 63 && (more || (b &&& 126uy) <> 0uy)
             result <- result ||| ((uint64 (b &&& 127uy)) <<< shift)
             shift <- shift + 7
             pos <- (if ok && not overflow then pos + 1 else Cursor.Fault)

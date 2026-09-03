@@ -61,6 +61,9 @@ let run () =
     // overflow is a fault, not a throw
     equal "u32 into 3 bytes faults" Cursor.Fault (Encoder.writeU32 (Array.zeroCreate 3) 0 1u)
     equal "fault propagates" Cursor.Fault (Encoder.writeU8 (Array.zeroCreate 3) Cursor.Fault 1uy)
+    equal "fits refuses a count near int max" false (Cursor.fits (Array.zeroCreate 8) 4 System.Int32.MaxValue)
+    let _, hugeFixed = Decoder.readFixedData (Array.zeroCreate 8) 4 System.Int32.MaxValue
+    equal "huge fixed read faults" Cursor.Fault hugeFixed
 
     // round trips through the decoder
     let roundUInt (v: uint64) =
@@ -96,6 +99,14 @@ let run () =
     equal "truncated u32 faults" Cursor.Fault truncated
     let _, longVarint = Decoder.readUInt (Array.create 11 0x80uy) 0
     equal "11-byte varint faults" Cursor.Fault longVarint
+    let _, tenthOverflow = Decoder.readUInt (Array.append (Array.create 9 0xFFuy) [| 0x7Fuy |]) 0
+    equal "tenth byte beyond 64 bits faults" Cursor.Fault tenthOverflow
+    let _, tenthBit1 = Decoder.readUInt (Array.append (Array.create 9 0x80uy) [| 0x02uy |]) 0
+    equal "tenth byte bit 1 faults" Cursor.Fault tenthBit1
+    let maxBack, maxNext = Decoder.readUInt (Array.append (Array.create 9 0xFFuy) [| 0x01uy |]) 0
+    equal "uint max still decodes" System.UInt64.MaxValue maxBack
+    equal "uint max consumed" 10 maxNext
+    equal "remaining past end is zero" 0 (Cursor.remaining (Array.zeroCreate 4) 9)
     let _, hugeData = Decoder.readData [| 0xFFuy; 0xFFuy; 0x7Fuy; 1uy |] 0
     equal "data longer than buffer faults" Cursor.Fault hugeData
     let _, hugeList = Decoder.readList [| 0xFFuy; 0x7Fuy |] 0 Decoder.readU8
@@ -125,3 +136,5 @@ let run () =
     // text shim
     equal "utf8 of unpaired surrogate is U+FFFD" [| 0xEFuy; 0xBFuy; 0xBDuy |] (Text.toUtf8 "\uD800")
     equal "utf8 decode of malformed is U+FFFD" "�" (Text.ofUtf8 [| 0xC0uy |])
+    equal "overlong three-byte NUL is U+FFFD" "�" (Text.ofUtf8 [| 0xE0uy; 0x80uy; 0x80uy |])
+    equal "well-formed three-byte decodes" "€" (Text.ofUtf8 [| 0xE2uy; 0x82uy; 0xACuy |])

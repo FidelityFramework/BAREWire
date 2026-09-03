@@ -47,6 +47,30 @@ module View =
             let v, next = Decoder.readU8 view.Region.Data at
             if Cursor.isOk next then Some v else None
 
+    /// Read an i8 field.
+    let readI8 (view: View) (name: string) : sbyte option =
+        let at = locate view name Repr.I8 1
+        if Cursor.isFault at then None
+        else
+            let v, next = Decoder.readI8 view.Region.Data at
+            if Cursor.isOk next then Some v else None
+
+    /// Read an i16 field, little-endian.
+    let readI16 (view: View) (name: string) : int16 option =
+        let at = locate view name Repr.I16 2
+        if Cursor.isFault at then None
+        else
+            let v, next = Decoder.readI16 view.Region.Data at
+            if Cursor.isOk next then Some v else None
+
+    /// Read a bool field: one byte, 0 or 1; another value is not a bool.
+    let readBool (view: View) (name: string) : bool option =
+        let at = locate view name Repr.Bool 1
+        if Cursor.isFault at then None
+        else
+            let v, next = Decoder.readBool view.Region.Data at
+            if Cursor.isOk next then Some v else None
+
     /// Read a u16 field, little-endian.
     let readU16 (view: View) (name: string) : uint16 option =
         let at = locate view name Repr.U16 2
@@ -110,6 +134,21 @@ module View =
         else Cursor.isOk (Encoder.writeU8 view.Region.Data at v)
 
     /// Write a u16 field, little-endian.
+    /// Write an i8 field.
+    let writeI8 (view: View) (name: string) (v: sbyte) : bool =
+        let at = locate view name Repr.I8 1
+        Cursor.isOk at && Cursor.isOk (Encoder.writeI8 view.Region.Data at v)
+
+    /// Write an i16 field, little-endian.
+    let writeI16 (view: View) (name: string) (v: int16) : bool =
+        let at = locate view name Repr.I16 2
+        Cursor.isOk at && Cursor.isOk (Encoder.writeI16 view.Region.Data at v)
+
+    /// Write a bool field as 1 or 0.
+    let writeBool (view: View) (name: string) (v: bool) : bool =
+        let at = locate view name Repr.Bool 1
+        Cursor.isOk at && Cursor.isOk (Encoder.writeBool view.Region.Data at v)
+
     let writeU16 (view: View) (name: string) (v: uint16) : bool =
         let at = locate view name Repr.U16 2
         if Cursor.isFault at then false

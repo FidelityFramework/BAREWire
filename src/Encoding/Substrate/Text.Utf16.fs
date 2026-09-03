@@ -87,7 +87,8 @@ module Text =
                 i <- i + 2
             elif b0 >= 0xE0 && b0 < 0xF0 && cont (i + 1) && cont (i + 2) then
                 let cp = ((b0 &&& 0x0F) <<< 12) ||| ((int bytes.[i + 1] &&& 0x3F) <<< 6) ||| (int bytes.[i + 2] &&& 0x3F)
-                chars.[o] <- (if cp >= 0xD800 && cp <= 0xDFFF then char 0xFFFD else char cp)
+                // overlong (below U+0800) and surrogate code points are ill-formed
+                chars.[o] <- (if cp < 0x800 || (cp >= 0xD800 && cp <= 0xDFFF) then char 0xFFFD else char cp)
                 o <- o + 1
                 i <- i + 3
             elif b0 >= 0xF0 && b0 < 0xF5 && cont (i + 1) && cont (i + 2) && cont (i + 3) then
@@ -112,3 +113,7 @@ module Text =
     /// Concatenate two strings.
     let append (a: string) (b: string) : string =
         a + b
+
+    /// The character at an index.
+    let charAt (s: string) (i: int) : char =
+        s.[i]

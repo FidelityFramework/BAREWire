@@ -28,7 +28,7 @@ let run () =
     let hand = { hip with Layout = { hip.Layout with Fields = [| hip.Layout.Fields.[0]; { hip.Layout.Fields.[1] with Offset = 4 }; hip.Layout.Fields.[2]; hip.Layout.Fields.[3] |] } }
     let hv = Validator.validate abi hand
     equal "misaligned handle disagrees" false hv.Agrees
-    check "misaligned finding named" (hv.Findings |> Array.exists (fun f -> f.Kind = FindingKind.Misaligned || f.Kind = FindingKind.Overlap)) (Validator.explain hv)
+    check "misaligned finding named" (hv.Findings |> Array.exists (fun f -> f.Kind = FindingKind.Misaligned)) (Validator.explain hv)
     // EpollEvent: declared 16 on x86-64 by the platform tree, packed to 12 by the kernel
     let epollDeclared = StructLayout.create "epoll_event" (Layout.create 16 8 [| Field.simple "events" 0 Repr.U32 AccessKind.ReadWrite; Field.simple "data" 8 Repr.U64 AccessKind.ReadWrite |]) None
     let ev = Validator.validate abi epollDeclared
@@ -60,6 +60,15 @@ let run () =
     match Btf.tryStruct image "epoll_event" with
     | None -> check "btf has epoll_event" false "missing"
     | Some t -> equal "btf epoll data at bit 64" 64 t.MemberBitOffsets.[1]
+    // a crafted name offset or an entry past the type section never raises
+    let crafted = Array.copy blob
+    crafted.[24] <- 0xFFuy; crafted.[25] <- 0xFFuy; crafted.[26] <- 0xFFuy; crafted.[27] <- 0xFFuy
+    let craftedImage = Btf.read crafted
+    check "crafted name offset reads as empty name, no raise" (craftedImage.Ok) "parse failed"
+    let overrun = Array.copy blob
+    // type_len larger than the section that follows
+    overrun.[12] <- 0xFFuy; overrun.[13] <- 0xFFuy
+    equal "type section overrun is refused" false (Btf.read overrun).Ok
     let path = Path.Combine(Path.GetTempPath(), "barewire-test.btf")
     File.WriteAllBytes(path, blob)
     try

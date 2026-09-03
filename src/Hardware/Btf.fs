@@ -165,7 +165,7 @@ module Btf =
             let fields = (Array.get descriptors d).Layout.Fields
             let mutable f = 0
             while f < Array.length fields do
-                if (Array.get fields f).Count > 1 then
+                if (Array.get fields f).Count <> 1 then
                     size <- size + 24
                 f <- f + 1
             size <- size + 12 + 12 * Array.length fields
@@ -237,13 +237,14 @@ module Btf =
             let mutable f = 0
             while f < Array.length fields do
                 let field = Array.get fields f
-                if field.Count > 1 then
+                if field.Count <> 1 then
                     pos <- Encoder.writeU32 types pos (uint32 0)
                     pos <- Encoder.writeU32 types pos (info KindArray 0)
                     pos <- Encoder.writeU32 types pos (uint32 0)
                     pos <- Encoder.writeU32 types pos (uint32 (primitiveId field.Repr))
                     pos <- Encoder.writeU32 types pos (uint32 IndexTypeId)
-                    pos <- Encoder.writeU32 types pos (uint32 field.Count)
+                    let count = if field.Count < 0 then 0 else field.Count
+                    pos <- Encoder.writeU32 types pos (uint32 count)
                     nextId <- nextId + 1
                 f <- f + 1
             d <- d + 1
@@ -263,8 +264,8 @@ module Btf =
                 let field = Array.get fields f
                 let memberOff, used5 = internName strings used field.Name
                 used <- used5
-                let typeId = if field.Count > 1 then arrayId else primitiveId field.Repr
-                if field.Count > 1 then
+                let typeId = if field.Count <> 1 then arrayId else primitiveId field.Repr
+                if field.Count <> 1 then
                     arrayId <- arrayId + 1
                 pos <- Encoder.writeU32 types pos (uint32 memberOff)
                 pos <- Encoder.writeU32 types pos (uint32 typeId)
@@ -291,17 +292,20 @@ module Btf =
     /// The NUL-terminated string at an offset in the string table.
     let private stringAt (strings: byte array) (offset: int) : string =
         let n = Array.length strings
-        let mutable e = offset
+        let inRange = offset >= 0 && offset < n
+        let mutable e = if inRange then offset else n
         while e < n && Array.get strings e <> 0uy do
             e <- e + 1
-        if offset < 0 || offset >= n then "" else Text.ofUtf8 (Array.sub strings offset (e - offset))
+        if inRange then Text.ofUtf8 (Array.sub strings offset (e - offset)) else ""
 
     let private emptyType : BtfType =
         { Id = 0; Kind = 0; Name = ""; SizeOrType = 0; MemberNames = Array.zeroCreate 0; MemberBitOffsets = Array.zeroCreate 0; MemberTypes = Array.zeroCreate 0 }
 
-    /// Parse a raw BTF blob into its types. Kinds this emitter does not write
-    /// are skipped by their documented sizes where known; an unknown kind or a
-    /// truncated entry ends the parse with `Ok = false`.
+    /// Parse a raw BTF blob into its types. Only the kinds this emitter
+    /// writes are understood (int, pointer, array, struct, float); any other
+    /// kind, an entry that runs past the type section, or a name offset
+    /// outside the string table ends the parse with `Ok = false` or an empty
+    /// name rather than a raise.
     let read (blob: byte array) : BtfImage =
         let magic, o1 = Decoder.readU16 blob 0
         let version, o2 = Decoder.readU8 blob o1
@@ -335,11 +339,12 @@ module Btf =
                     elif kind = KindStruct then 12 * vlen
                     elif kind = KindPointer || kind = KindFloat then 0
                     else -1
-                ok <- Cursor.isOk p3 && extra >= 0 && Cursor.fits blob p3 extra
+                // each entry must lie inside the type section, not merely inside the blob
+                ok <- Cursor.isOk p3 && extra >= 0 && extra <= typesEnd - p3
                 if ok then
                     count <- count + 1
                     pos <- p3 + extra
-            if not ok then { Ok = false; Types = Array.zeroCreate 0 }
+            if not ok || pos <> typesEnd then { Ok = false; Types = Array.zeroCreate 0 }
             else
                 let types : BtfType array = Array.zeroCreate count
                 let mutable id = 0

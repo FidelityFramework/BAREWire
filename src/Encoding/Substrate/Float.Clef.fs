@@ -6,6 +6,8 @@ namespace BAREWire.Encoding
 /// The intrinsics are typed over the platform word for the 32-bit casts
 /// (`float32 -> int`, `int -> float32`) and over `int64` for the 64-bit ones;
 /// the conversions at the edge keep this module's surface at the wire widths.
+/// SUBSET(bits-word): preferred spelling is the int32-typed intrinsic with no
+/// edge conversion.
 module Float =
 
     let f32ToBits (v: float32) : int32 = int32 (Bits.float32ToInt32Bits v)

@@ -75,7 +75,8 @@ module Manifest =
         let l5 = sp l4 (kv "trim" (boolText b.TrimDelimiter))
         let l6 = sp l5 (kv "space" (orNone b.Space))
         let l7 = sp l6 (kv "lifetime" b.Lifetime)
-        sp l7 (kv "access" b.Access)
+        let l8 = sp l7 (kv "access" b.Access)
+        if b.Framing = Framing.Ring then sp l8 (kv "slot" (Fmt.ofInt b.Slot)) else l8
 
     let private contractLine (indent: string) (c: Contract) : string =
         let l1 = sp (sp (Text.append indent "contract") c.Name) (kv "logic" c.Logic)
@@ -85,7 +86,8 @@ module Manifest =
     let private endpointLine (e: Endpoint) : string =
         let l1 = sp (sp "  endpoint" e.Name) (kv "location" e.Location)
         let l2 = sp l1 (kv "address" (orNone e.Address))
-        sp (sp l2 (kv "since" (orNone e.Since))) (kv "until" (orNone e.Until))
+        let l3 = sp l2 (kv "signature" (orNone e.Signature))
+        sp (sp l3 (kv "since" (orNone e.Since))) (kv "until" (orNone e.Until))
 
     let private transportLine (t: Transport) : string =
         let l1 = sp (sp "transport" t.Name) (kv "kind" t.Kind)

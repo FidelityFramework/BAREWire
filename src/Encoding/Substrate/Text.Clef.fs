@@ -18,3 +18,7 @@ module Text =
     /// Concatenate two strings.
     let append (a: string) (b: string) : string =
         String.concat2 a b
+
+    /// The character at an index.
+    let charAt (s: string) (i: int) : char =
+        String.charAt s i

@@ -33,6 +33,18 @@ module ValidationErrorKind =
     let DuplicateTag = "duplicate-tag"
     [<Literal>]
     let DuplicateField = "duplicate-field"
+    /// A union case tag below zero.
+    [<Literal>]
+    let InvalidTag = "invalid-tag"
+    /// Two union cases of the same type.
+    [<Literal>]
+    let DuplicateCaseType = "duplicate-case-type"
+    /// An enum value name declared twice.
+    [<Literal>]
+    let DuplicateEnumName = "duplicate-enum-name"
+    /// An enum value declared twice.
+    [<Literal>]
+    let DuplicateEnumValue = "duplicate-enum-value"
     [<Literal>]
     let DuplicateTypeName = "duplicate-type-name"
     [<Literal>]
@@ -119,18 +131,33 @@ module Validation =
         | Some tt -> isVoid schema tt (depth + 1)
         | None -> false
 
-    /// Walk the edges that embed a type in place (struct fields, fixed-list
-    /// elements, plain references) and answer whether they lead back to the
-    /// declaration at `start`. Optional, list, map, and union cases are
-    /// indirections in BARE and are not followed: a cycle through them is
-    /// legal. Declarations with an index below `start` are not followed
-    /// either, so each cycle is reported once, at its first-declared member.
+    /// Walk every reference edge of a type (struct fields, list and fixed-list
+    /// elements, optional payloads, map keys and values, union cases, plain
+    /// references) and answer whether they lead back to the declaration at
+    /// `start`. BARE forbids a type defined in terms of itself by any route
+    /// (docs/03, "Schema Validation"), so no edge is exempt. Declarations
+    /// with an index below `start` are not followed, so each cycle is
+    /// reported once, at its first-declared member.
     let rec private reachesInPlace (schema: SchemaDefinition) (start: int) (path: int array) (t: SchemaType) : bool =
         match t with
         | Struct fields -> fieldsReachInPlace schema start path fields 0
         | FixedList spec -> reachesInPlace schema start path spec.Element
+        | List inner -> reachesInPlace schema start path inner
+        | Optional inner -> reachesInPlace schema start path inner
+        | Map spec -> reachesInPlace schema start path spec.Key || reachesInPlace schema start path spec.Value
+        | Union cases -> casesReachInPlace schema start path cases 0
         | TypeRef name -> refReachesInPlace schema start path name
         | _ -> false
+
+    and private casesReachInPlace (schema: SchemaDefinition) (start: int) (path: int array) (cases: UnionCase array) (from: int) : bool =
+        let n = Array.length cases
+        let mutable i = from
+        let mutable found = false
+        while not found && i < n do
+            let c = Array.get cases i
+            found <- reachesInPlace schema start path c.Type
+            i <- i + 1
+        found
 
     and private fieldsReachInPlace (schema: SchemaDefinition) (start: int) (path: int array) (fields: StructField array) (from: int) : bool =
         let n = Array.length fields
@@ -148,6 +175,61 @@ module Validation =
         elif index = start then true
         elif index < start || onPath index path then false
         else reachesInPlace schema start (pushIndex path index) (Array.get schema.Types index).Type
+
+    /// Structural equality of two types as written (references compare by
+    /// name), enough to refuse a union with two cases of one type.
+    let rec private sameType (a: SchemaType) (b: SchemaType) : bool =
+        match a with
+        | Prim ka ->
+            let r = match b with | Prim kb -> ka = kb | _ -> false
+            r
+        | FixedData na ->
+            let r = match b with | FixedData nb -> na = nb | _ -> false
+            r
+        | Enum sa ->
+            let r = match b with | Enum sb -> sa.Base = sb.Base && Array.length sa.Values = Array.length sb.Values | _ -> false
+            r
+        | Optional ia ->
+            let r = match b with | Optional ib -> sameType ia ib | _ -> false
+            r
+        | List ia ->
+            let r = match b with | List ib -> sameType ia ib | _ -> false
+            r
+        | FixedList fa ->
+            let r = match b with | FixedList fb -> fa.Length = fb.Length && sameType fa.Element fb.Element | _ -> false
+            r
+        | Map ma ->
+            let r = match b with | Map mb -> sameType ma.Key mb.Key && sameType ma.Value mb.Value | _ -> false
+            r
+        | Union ca ->
+            let r = match b with | Union cb -> Array.length ca = Array.length cb && casesSame ca cb 0 | _ -> false
+            r
+        | Struct fa ->
+            let r = match b with | Struct fb -> Array.length fa = Array.length fb && fieldsSame fa fb 0 | _ -> false
+            r
+        | TypeRef na ->
+            let r = match b with | TypeRef nb -> na = nb | _ -> false
+            r
+
+    and private casesSame (xs: UnionCase array) (ys: UnionCase array) (from: int) : bool =
+        let mutable i = from
+        let mutable same = true
+        while same && i < Array.length xs do
+            let x = Array.get xs i
+            let y = Array.get ys i
+            same <- x.Tag = y.Tag && sameType x.Type y.Type
+            i <- i + 1
+        same
+
+    and private fieldsSame (xs: StructField array) (ys: StructField array) (from: int) : bool =
+        let mutable i = from
+        let mutable same = true
+        while same && i < Array.length xs do
+            let x = Array.get xs i
+            let y = Array.get ys i
+            same <- x.Name = y.Name && sameType x.Type y.Type
+            i <- i + 1
+        same
 
     /// Walk a type, appending every defect found under `location`.
     /// `inUnion` is true when the type is directly a union case, the one
@@ -193,8 +275,8 @@ module Validation =
                 dupValue <- dupValue || w.Value = v.Value
                 j <- j + 1
             let valueLocation = sub location v.Name
-            acc <- (if dupName then push acc (error ValidationErrorKind.DuplicateField valueLocation) else acc)
-            acc <- (if dupValue then push acc (error ValidationErrorKind.DuplicateTag valueLocation) else acc)
+            acc <- (if dupName then push acc (error ValidationErrorKind.DuplicateEnumName valueLocation) else acc)
+            acc <- (if dupValue then push acc (error ValidationErrorKind.DuplicateEnumValue valueLocation) else acc)
             i <- i + 1
         acc
 
@@ -206,12 +288,16 @@ module Validation =
             let c = Array.get cases i
             let mutable j = 0
             let mutable dup = false
+            let mutable dupType = false
             while j < i do
                 let d = Array.get cases j
                 dup <- dup || d.Tag = c.Tag
+                dupType <- dupType || sameType d.Type c.Type
                 j <- j + 1
             let caseLocation = sub location (Text.append "case" (Fmt.ofInt c.Tag))
+            acc <- (if c.Tag < 0 then push acc (error ValidationErrorKind.InvalidTag caseLocation) else acc)
             acc <- (if dup then push acc (error ValidationErrorKind.DuplicateTag caseLocation) else acc)
+            acc <- (if dupType then push acc (error ValidationErrorKind.DuplicateCaseType caseLocation) else acc)
             acc <- walk schema caseLocation true c.Type acc
             i <- i + 1
         acc
@@ -242,10 +328,12 @@ module Validation =
 
     /// Validate a schema. An empty result means the schema is well-formed:
     /// the root is declared, no name is declared twice, every reference
-    /// resolves, `void` appears only as a union case, map keys are keyable
+    /// resolves, `void` appears only as a union case (a bare `void`
+    /// declaration is allowed for that purpose), map keys are keyable
     /// primitives, no enum, union, or struct is empty, fixed lengths are
-    /// positive, no tag, field, or enum value repeats, and no type embeds
-    /// itself in place. Errors come in declaration order.
+    /// positive, tags are non-negative, no tag, case type, field, or enum
+    /// name or value repeats, and no type is defined in terms of itself by
+    /// any route. Errors come in declaration order.
     let validate (schema: SchemaDefinition) : ValidationError array =
         let n = Array.length schema.Types
         let mutable acc : ValidationError array = Array.zeroCreate 0
@@ -257,7 +345,14 @@ module Validation =
             acc <- (if firstIndex < i then push acc (error ValidationErrorKind.DuplicateTypeName nt.Name) else acc)
             let cyclic = firstIndex = i && reachesInPlace schema i (Array.zeroCreate 0) nt.Type
             acc <- (if cyclic then push acc (error ValidationErrorKind.CyclicTypeReference nt.Name) else acc)
-            acc <- walk schema nt.Name false nt.Type acc
+            // A bare `void` declaration is legal: it exists to be a union case
+            // by reference, and every non-union use of the reference is refused
+            // where it occurs.
+            let bareVoid =
+                match nt.Type with
+                | Prim k -> k = PrimKind.Void
+                | _ -> false
+            acc <- walk schema nt.Name bareVoid nt.Type acc
             i <- i + 1
         acc
 

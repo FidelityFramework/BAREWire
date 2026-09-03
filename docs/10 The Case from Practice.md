@@ -55,9 +55,13 @@ representation choices — which is what a schema is, and what BAREWire's
 DMA descriptors… used by Farscape to validate memory layout contracts across
 heterogeneous processors."
 
-That type exists in `src/Hardware/Descriptors.fs` today. It has a constructor
-and no validator and no consumer. **The gap is not conceptual; it is that
-nothing yet checks the contract the descriptor describes.**
+That type exists in `src/Hardware/Descriptors.fs`, and since 2026-09-03 the
+validator this paragraph asked for exists beside it (`src/Hardware/Validator.fs`:
+`derive` computes the natural layout under an ABI profile, `validate` reports
+where a declared descriptor disagrees). What remains is the consumer: Farscape
+does not yet emit descriptors, and HelloWayland's hand-laid record has not yet
+been replaced by a validated one. **The gap was never conceptual; the check now
+exists, and the bindings have to be re-based onto it.**
 
 ## Evidence 2 — HelloWayland, where the formalism is reimplemented by hand and says so
 
@@ -154,13 +158,15 @@ the identical question for blade support at a process boundary and notes the
 resolution is probably the same. **Until §7.3 closes, a schema cannot mean
 anything across a boundary**, and no amount of implementation fixes that.
 
-**3. Validation is the missing half, not mapping.** The repository contains the
-encoding and schema halves. The mapping half — Region and View, specified at
-length in [04 Memory Mapping](./04%20Memory%20Mapping.md) — is design only. But
-the evidence above suggests the *first* thing worth building is neither: it is a
-validator that can take a `StructDescriptor` and an ABI and answer whether they
-agree. Farscape needs that to emit correct bindings; HelloWayland needs it to
-stop hand-padding; and it is useful before Region/View exists.
+**3. Validation was the missing half, not mapping.** When this note was
+written the repository held the encoding and schema halves and neither the
+mapping half (Region and View, [04 Memory Mapping](./04%20Memory%20Mapping.md))
+nor a validator. The evidence above said the *first* thing worth building was
+the validator: something that takes a `StructDescriptor` and an ABI and answers
+whether they agree, which Farscape needs to emit correct bindings and
+HelloWayland needs to stop hand-padding. That is what the 2026-09-03 rebuild
+built first (`src/Hardware/Validator.fs`), with Region and View
+(`src/Memory/`) beside it over the portable byte model.
 
 ## Where it stops being optional: ThreeBody
 

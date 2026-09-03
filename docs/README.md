@@ -4,7 +4,7 @@
 
 This folder documents BAREWire: the typed contract between Clef components, and the declared authority on memory layout for every processor a program runs on. Two missions, ranked ([Substrate_Formalism](./Substrate_Formalism.md), "The two missions"):
 
-- **Primary.** A value crossing a BAREWire boundary between Clef components preserves its case structure, payload types, and dimensional annotations by construction; read inward, the same vocabulary declares each platform's memory spaces, buffer schemas, boundary surfaces, and transports for the compiler's three observers ([11](./11%20Platform%20Description.md)).
+- **Primary.** A value crossing a BAREWire boundary between Clef components arrives with its case structure, payload types, and dimensional annotations intact, by construction and without tagging: the contract is a design-time fact, the bytes are its untagged image under a mapping both sides hold ([Substrate_Formalism](./Substrate_Formalism.md), "Three layers"); read inward, the same vocabulary declares each platform's memory spaces, buffer schemas, boundary surfaces, and transports for the compiler's three observers ([11](./11%20Platform%20Description.md)).
 - **Secondary.** The same contract binds to JavaScript, .NET, Rust, C, and C++: source-shared where one protocol file compiles under Fable, .NET, and Composer, schema-shared where a BARE schema is the interchange artifact.
 
 The documents specify the system; [Implementation Status](./Implementation%20Status.md) says which parts are built; [Readiness Audit](./Readiness%20Audit.md) is the build plan; [12 Intersection Subset](./12%20Intersection%20Subset.md) is the compiler-facing rulebook the shared source follows and the gates that enforce it.

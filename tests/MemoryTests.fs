@@ -12,7 +12,7 @@ let run () =
     equal "slice outside" true (Region.slice region 60 8).IsNone
     equal "contains" true (Region.contains region 0 64)
     equal "not contains" false (Region.contains region 1 64)
-    let layout = Layout.create 16 8 [| Field.simple "a" 0 Repr.U32 AccessKind.ReadWrite; Field.simple "b" 4 Repr.I32 AccessKind.ReadWrite; Field.simple "c" 8 Repr.F64 AccessKind.ReadWrite |]
+    let layout = Layout.create 24 8 [| Field.simple "a" 0 Repr.U32 AccessKind.ReadWrite; Field.simple "b" 4 Repr.I32 AccessKind.ReadWrite; Field.simple "c" 8 Repr.F64 AccessKind.ReadWrite; Field.simple "d" 16 Repr.I8 AccessKind.ReadWrite; Field.simple "e" 17 Repr.Bool AccessKind.ReadWrite; Field.simple "f" 18 Repr.I16 AccessKind.ReadWrite |]
     match View.create region layout with
     | None -> check "view created" false "none"
     | Some view ->
@@ -22,6 +22,13 @@ let run () =
         equal "read a" (Some 0xDEADBEEFu) (View.readU32 view "a")
         equal "read b" (Some -7) (View.readI32 view "b")
         equal "read c" (Some 2.5) (View.readF64 view "c")
+        equal "write d" true (View.writeI8 view "d" -3y)
+        equal "write e" true (View.writeBool view "e" true)
+        equal "write f" true (View.writeI16 view "f" -300s)
+        equal "read d" (Some -3y) (View.readI8 view "d")
+        equal "read e" (Some true) (View.readBool view "e")
+        equal "read f" (Some -300s) (View.readI16 view "f")
+        equal "contains refuses a wrapping length" false (Region.contains region 4 System.Int32.MaxValue)
         equal "wrong repr refused" None (View.readU8 view "a")
         equal "unknown field refused" None (View.readU32 view "zz")
         // the bytes are little-endian at the declared offsets

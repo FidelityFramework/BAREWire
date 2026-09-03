@@ -72,6 +72,12 @@ module MemoryKind =
         || k = Map || k = Ring
 
 /// The kind of a kernel map, for a memory space of kind Map.
+///
+/// `MemoryKind` above deliberately repeats the ARM memory-map kinds of
+/// `Hardware.MemoryRegionKind` (flash, sram, peripheral, dma) as members of a
+/// wider vocabulary: a platform description names every space a program can
+/// occupy, and a peripheral descriptor names the region a register bank is
+/// in. The spellings agree so a value moves between the two by name.
 type MapKind = string
 
 [<RequireQualifiedAccess>]
@@ -175,13 +181,16 @@ module EndpointKind =
     let Port: EndpointKind = "port"
     [<Literal>]
     let Symbol: EndpointKind = "symbol"
+    /// A numbered host helper (a BPF helper id), the address being the number.
+    [<Literal>]
+    let HelperNumber: EndpointKind = "helper-number"
 
     /// An endpoint location the library does not name; `Check.run` reports it.
     let Unknown (value: string) : EndpointKind = value
 
     /// True when the tag is one the library names.
     let isValid (k: EndpointKind) : bool =
-        k = PackagePin || k = SyscallNumber || k = GlobalPath || k = Port || k = Symbol
+        k = PackagePin || k = SyscallNumber || k = GlobalPath || k = Port || k = Symbol || k = HelperNumber
 
 /// The kind of boundary a surface is: the syscall table, a foreign function
 /// interface, a host API, a pin map, or an IPC channel.

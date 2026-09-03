@@ -21,7 +21,7 @@ module Region =
 
     /// True when `length` bytes at relative `offset` lie inside the region.
     let contains (region: Region) (offset: int) (length: int) : bool =
-        offset >= 0 && length >= 0 && offset + length <= region.Length
+        offset >= 0 && length >= 0 && length <= region.Length - offset
 
     /// A sub-region of `length` bytes at relative `offset`, when it lies inside this one.
     let slice (region: Region) (offset: int) (length: int) : Region option =

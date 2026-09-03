@@ -99,7 +99,10 @@ module Analysis =
         | FixedData n ->
             let width = if n < 0 then 0 else n
             fixedWidth width
-        | Enum spec -> primSize spec.Base
+        | Enum spec ->
+            // BARE encodes every enum value as `uint` (ULEB128) whatever the
+            // declared base; the base bounds the values, not the encoding.
+            primSize PrimKind.UInt
         | Optional inner ->
             let s = sizeOf schema path inner
             { Min = 1; Max = 1 + s.Max; IsBounded = s.IsBounded; IsFixed = false }

@@ -99,7 +99,8 @@ module Encoder =
 
     /// Write a bool as 1 or 0.
     let writeBool (data: byte array) (offset: int) (v: bool) : int =
-        writeU8 data offset (if v then 1uy else 0uy)
+        let b = if v then 1uy else 0uy
+        writeU8 data offset b
 
     /// Write length-prefixed bytes.
     let writeData (data: byte array) (offset: int) (bytes: byte array) : int =

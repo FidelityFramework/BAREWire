@@ -30,9 +30,11 @@ module Cursor =
     /// True when `count` bytes starting at `offset` lie inside `data`.
     /// A fault offset never fits.
     let fits (data: byte array) (offset: int) (count: int) : bool =
-        offset >= 0 && count >= 0 && offset + count <= Array.length data
+        // Subtraction form: `offset + count` could wrap for a wire-supplied
+        // count near the int maximum and pass the check it should fail.
+        offset >= 0 && count >= 0 && count <= Array.length data - offset
 
     /// The number of bytes remaining from `offset` to the end of `data`,
     /// or zero on a fault.
     let remaining (data: byte array) (offset: int) : int =
-        if offset < 0 then 0 else Array.length data - offset
+        if offset < 0 || offset > Array.length data then 0 else Array.length data - offset

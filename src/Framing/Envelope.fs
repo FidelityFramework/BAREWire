@@ -4,7 +4,8 @@ open BAREWire.Encoding
 
 /// The frame kind, as its wire byte. A byte alias with a constant module
 /// rather than a union: the tag is the wire byte, and a record carrying a
-/// union field does not lower in the current Composer snapshot (docs/12 §1).
+/// nullary union field does not lower in the current Composer snapshot.
+/// SUBSET(record-union-field): preferred spelling is a five-case FrameKind union.
 type FrameKind = byte
 
 [<RequireQualifiedAccess>]
@@ -32,7 +33,9 @@ type Frame = {
 }
 
 /// A frame decoded from the front of a stream buffer, with the bytes
-/// consumed, or `Cursor.Fault` consumed when the buffer held no whole frame.
+/// consumed. `Consumed` is `Envelope.Incomplete` when the buffer holds no
+/// whole frame yet (read more and retry), and `Cursor.Fault` when a whole
+/// frame is present but malformed (the stream is corrupt; do not retry).
 type StreamDecode = {
     Frame: Frame
     Consumed: int
@@ -65,6 +68,16 @@ module Envelope =
     [<Literal>]
     let LengthPrefixSize = 4
 
+    /// The `Consumed` value of a stream decode that needs more bytes. Distinct
+    /// from `Cursor.Fault`, which means the frame present is malformed.
+    [<Literal>]
+    let Incomplete = -2
+
+    /// The largest frame body a stream transport admits: the u32 prefix must
+    /// fit the platform int, and a frame is never larger than this.
+    [<Literal>]
+    let MaxStreamBody = 2147483647
+
     /// Write a frame at an offset: kind, correlation, payload. Returns the next offset.
     let writeMessage (data: byte array) (offset: int) (frame: Frame) : int =
         let o1 = Encoder.writeU8 data offset frame.Kind
@@ -88,7 +101,8 @@ module Envelope =
     /// Decode a self-framed envelope: the payload is everything after the
     /// header. Returns the frame and the payload offset, or `empty` and
     /// `Cursor.Fault` when the header is short or the kind byte is unknown.
-    /// (SUBSET(generic-option): preferred spelling is `Frame option`.)
+    /// The cursor tuple rather than `Frame option` keeps every decoder in one
+    /// shape; a concrete option would also lower (docs/12, `generic-option`).
     let decodeMessage (bytes: byte array) : Frame * int =
         let kb, o1 = Decoder.readU8 bytes 0
         let correlation, o2 = Decoder.readU32 bytes o1
@@ -106,19 +120,29 @@ module Envelope =
         let _ = writeMessage data o1 frame
         data
 
-    /// Decode one stream-framed envelope from the front of a buffer. When
-    /// the buffer holds no whole frame, or the header is malformed, the
-    /// result's `Consumed` is `Cursor.Fault`; a short buffer is not an
-    /// error, the caller reads more and retries.
-    /// (SUBSET(generic-option): preferred spelling is `StreamDecode option`.)
+    /// Decode one stream-framed envelope from the front of a buffer. Three
+    /// outcomes: the frame and the bytes consumed; `Incomplete` when the
+    /// buffer is shorter than the prefix plus the announced body (read more
+    /// and retry); `Cursor.Fault` when a whole frame is present but malformed
+    /// (a body shorter than the header, an unknown kind byte, or a prefix
+    /// that cannot fit), which a caller treats as a corrupt stream.
+    /// SUBSET(value-match): a record result rather than a three-case union,
+    /// which the preferred spelling would be.
     let tryDecodeStream (bytes: byte array) : StreamDecode =
         let len32, o1 = Decoder.readU32 bytes 0
-        let len = if len32 <= uint32 2147483647 then int len32 else 0
-        let whole = Cursor.isOk o1 && len32 <= uint32 2147483647 && Cursor.fits bytes o1 len
-        let body, _ = Decoder.readBytesRaw bytes (if whole then o1 else Cursor.Fault) len
+        let prefixOk = Cursor.isOk o1 && len32 <= uint32 MaxStreamBody
+        let len = if prefixOk then int len32 else 0
+        let present = prefixOk && Cursor.fits bytes o1 len
+        let start = if present then o1 else Cursor.Fault
+        let body, _ = Decoder.readBytesRaw bytes start len
         let frame, at = decodeMessage body
-        let ok = whole && Cursor.isOk at
-        { Frame = frame; Consumed = (if ok then LengthPrefixSize + len else Cursor.Fault) }
+        let wellFormed = present && len >= HeaderSize && Cursor.isOk at
+        let incomplete = Cursor.isOk o1 && (not prefixOk || not present) && len32 <= uint32 MaxStreamBody || (Cursor.isFault o1)
+        let consumed =
+            if wellFormed then LengthPrefixSize + len
+            elif incomplete then Incomplete
+            else Cursor.Fault
+        { Frame = frame; Consumed = consumed }
 
     /// A Tell frame: no correlation.
     let tell (payload: byte array) : Frame =
@@ -145,11 +169,15 @@ module Envelope =
         let o1 = Encoder.writeInt data offset (int64 h.Epoch)
         Encoder.writeString data o1 h.Build
 
-    /// Read a Hello.
+    /// Read a Hello. An epoch outside the int32 range is a fault, not a
+    /// wrapped value: the handshake exists to detect a mismatch.
     let readHello (data: byte array) (offset: int) : Hello * int =
         let epoch, o1 = Decoder.readInt data offset
         let build, o2 = Decoder.readString data o1
-        ({ Epoch = int32 epoch; Build = build }, o2)
+        let inRange = epoch >= -2147483648L && epoch <= 2147483647L
+        let e = if inRange then int32 epoch else int32 0
+        let next = if inRange then o2 else Cursor.Fault
+        ({ Epoch = e; Build = build }, next)
 
     /// The Hello control frame that opens a session. The payload is at most
     /// ten bytes of epoch plus the build string.
@@ -158,11 +186,13 @@ module Envelope =
         let capacity = 20 + Array.length (Text.toUtf8 build)
         let data : byte array = Array.zeroCreate capacity
         let next = writeHello data 0 h
-        control (Array.sub data 0 (if Cursor.isOk next then next else 0))
+        let len = if Cursor.isOk next then next else 0
+        control (Array.sub data 0 len)
 
     /// The Hello carried by a Control frame, with the bytes consumed, or
     /// `Cursor.Fault` when the frame is not a well-formed Hello.
-    /// (SUBSET(generic-option): preferred spelling is `Hello option`.)
+    /// The cursor tuple rather than `Hello option`, for the same reason as
+    /// `decodeMessage`.
     let tryReadHello (frame: Frame) : Hello * int =
         let h, consumed = Codec.decode readHello frame.Payload
         (h, (if frame.Kind = FrameKind.Control then consumed else Cursor.Fault))

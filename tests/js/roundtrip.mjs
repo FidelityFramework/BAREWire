@@ -65,7 +65,7 @@ expect("payload", f.Payload.length, 24);
 const sd = Envelope.Envelope_tryDecodeStream(Envelope.Envelope_encodeStream(frame));
 expect("consumed", sd.Consumed, 33);
 const short = Envelope.Envelope_tryDecodeStream(Envelope.Envelope_encodeStream(frame).slice(0, 32));
-expect("shortconsumed", short.Consumed, -1);
+expect("shortconsumed", short.Consumed, -2); // Envelope.Incomplete: read more and retry
 const h = Envelope.Envelope_hello(1, "abc123");
 expect("hello", hex(h.Payload), "02 06 61 62 63 31 32 33");
 const [hv, hc] = Envelope.Envelope_tryReadHello(h);

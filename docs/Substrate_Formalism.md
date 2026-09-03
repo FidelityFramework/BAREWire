@@ -16,6 +16,16 @@ This is a sharper statement than "a discriminated-union-aware memory layout" or 
 
 > BARE is the external binary encoding. The typed contract BAREWire upholds across a boundary is the substrate guarantee. Keep the two distinct: the encoding is how bytes cross; the contract is what is preserved when they do.
 
+## Three layers, one contract
+
+"Typed contract" names a design-time fact, and it is worth being exact about which fact, because the phrase has been read as if the bytes themselves carried types. They do not. Three layers are in play, and the discipline is that the first survives the third without the third knowing anything about it.
+
+1. **The design-time contract.** Types, case structure, dimensional annotations, measures, widths after inference. This exists in the compiler, in the native type universe, at design time, and is discharged there: a dimension mismatch is a compile error, an obligation is dispatched to the solver before any byte exists. Everything in this layer erases. Nothing of it is present at run time on either side of a boundary.
+2. **The mapping.** For each substrate and each protocol, the rule that takes a value of the contract to a byte layout and back: the BARE encoding for a wire or a queue, the C natural layout of an ABI profile for a foreign call, a map value's layout for a kernel, a `DataView` window for JavaScript. The mapping is fixed at compile time, in Fixed dimensions, and both endpoints hold it because both were compiled against the same schema. It is where the schema lives.
+3. **The wire.** Untagged bytes. A BARE frame carries no type identifiers, no field names, no version, no dimension; a union case carries its index and an optional its presence bit, and that is the whole of the self-description. The receiver reconstructs the value not from tags but from the mapping it already holds. This is what makes the encoding cheap enough for a timestep-critical link, and it is why a receiver with the wrong schema misreads silently rather than failing loudly: the epoch handshake exists for exactly that gap.
+
+So "a value crosses the boundary with its case structure and dimensions preserved" means: the design-time contract on the far side is the same contract, the mapping is the same mapping, and the bytes are the untagged image of the value under it. The contract is preserved *by construction*, not by tagging, and the guarantee is only as strong as the agreement of the two mappings, which is what the schema epoch, the golden-frame corpus, and the layout validator are for. Where this documentation says "typed contract," it means layer 1 upheld across layer 3 through layer 2; where it says "the bytes" or "the frame," it means layer 3, and nothing typed is there.
+
 ## Why it is significant
 
 Because BAREWire is a formalizable substrate with a well-articulated TCB, the verification story reaches **across** the runtime boundary and across heterogeneous processors, rather than stopping at a process edge. A composition of specialists can place components on FPGA, neuromorphic, or remote nodes, and the composition stays coherent, because BAREWire carries meaning across the hardware boundary as cleanly as within a single process. The cross-boundary consultation interfaces are the structure maps that make the composition compose.

@@ -1,13 +1,13 @@
 # Implementation Status
 
-Assessed 2026-09-03 against `src/`, after the rebuild the [Readiness Audit](./Readiness%20Audit.md) planned. The documents specify the system; this ledger says which parts are built and which gates each passes. Three gates: **.NET** (`dotnet run --project tests/BAREWire.Tests.fsproj`, 234 checks), **JavaScript** (`fable src/BAREWire.Fable.fsproj`, then `node tests/js/roundtrip.mjs` and `node tests/js/tiers.mjs`, the latter dispatching the platform obligations to cvc5 from the JavaScript build), and **native** (`samples/RoundTrip` compiled by Composer and run). The native gate is blocked on the Composer snapshot HelloProof pins by the compiler-surface gaps [12 Intersection Subset](./12%20Intersection%20Subset.md) records; a compiler lane is closing them with regression samples, and the rebuilt Composer is the acceptance target.
+Assessed 2026-09-03 against `src/`, after the rebuild the [Readiness Audit](./Readiness%20Audit.md) planned. The documents specify the system; this ledger says which parts are built and which gates each passes. Three gates: **.NET** (`dotnet run --project tests/BAREWire.Tests.fsproj`, 300 checks), **JavaScript** (`fable src/BAREWire.Fable.fsproj`, then `node tests/js/roundtrip.mjs` and `node tests/js/tiers.mjs`, the latter dispatching the platform obligations to cvc5 from the JavaScript build), and **native** (`samples/RoundTrip` compiled by Composer and run). The native gate is blocked on the Composer snapshot HelloProof pins by the compiler-surface gaps [12 Intersection Subset](./12%20Intersection%20Subset.md) records; a compiler lane is closing them with regression samples, and the rebuilt Composer is the acceptance target.
 
 | Concern | Document | Status |
 | --- | --- | --- |
 | Substrate reading, the two missions | [Substrate_Formalism](./Substrate_Formalism.md) | Position. Current; the missions ranked (2026-09-03). |
 | Platform description, the inward reading | [11 Platform Description](./11%20Platform%20Description.md) | Position and now vocabulary: `src/Platform/` implements the description and its three observers; the kernel section (eBPF, wBPF, ThreeBody) is represented and nominally covered. |
 | Evidence for the role | [10 The Case from Practice](./10%20The%20Case%20from%20Practice.md) | Position. Current. |
-| Compiler-facing rules and gates | [12 Intersection Subset](./12%20Intersection%20Subset.md) | Current; every rule verified or documented, with a preferred spelling and a repro. |
+| Compiler-facing rules and gates | [12 Intersection Subset](./12%20Intersection%20Subset.md) | Current; every rule verified or documented, with a preferred spelling and a repro. An adversarial review of every tier against the documents and these rules (2026-09-03, 40 confirmed findings) has been applied; the remaining items are the compiler lane's. |
 | Encoding | [02 Encoding and Decoding Engine](./02%20Encoding%20and%20Decoding%20Engine.md) | **Built.** `src/Encoding/`: threaded offsets, fault sentinel, full primitive and aggregate coverage, whole-value combinators, per-substrate shims. Gates: .NET (golden vectors), JavaScript (byte-identical). Native: type-checks; run blocked (`array-length`, `if-argument`). |
 | Framing | [05 Network Protocol](./05%20Network%20Protocol.md) (envelope adopted) | **Built.** `src/Framing/Envelope.fs`: kind, correlation, payload; stream length prefix; Hello. Gates: .NET, JavaScript. Transports, RPC, streaming: design. |
 | Schema | [03 Schema System](./03%20Schema%20System.md) | **Built.** `src/Schema/`: BARE's fixed vocabulary, validation, wire size, packed offsets, compatibility, `.bare` text emission. Gates: .NET, JavaScript. Native blocked (`recursive-union`). Not built: a `.bare` parser, codec generation. |
@@ -21,7 +21,7 @@ Assessed 2026-09-03 against `src/`, after the rebuild the [Readiness Audit](./Re
 
 ## What lands next (Readiness Audit §4)
 
-- Step 11: the Linux x86_64 description as a value in `Fidelity.Platform/CPU/Linux/x86_64/Description.clef`, with `consoleReadln` declaring the capacity `Console.clef` names once.
+- Step 11 (landed 2026-09-03 in the Fidelity.Platform working tree): `Fidelity.Platform/CPU/Linux/x86_64/Description.clef`, with `consoleReadln` declaring the capacity `Console.clef` names once as `READLINE_CAPACITY`; the Arty A7 gains `ArtyA7_100T.Description.clef` and a rebase plan for its contracts.
 - Steps 10 and 13: Composer's `PlatformDescriptionResolution` coeffect, the `memory_map.manifest` residual, and obligations from the declaration in both dispatches (`06b` for cvc5 at design time, `09` in the `smt` dialect for cvc5 at build time), replacing the `1024L` literals in `pSysReadline`.
 - The compiler lane: the surface gaps in 12, each with a regression sample, so `samples/RoundTrip` runs and the native transcript joins the differential.
 - Step 9: Fidelity.Platform's contracts as an alias layer over `src/Platform`, and the Arty description's memory spaces.

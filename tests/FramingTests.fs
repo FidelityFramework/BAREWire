@@ -30,7 +30,20 @@ let run () =
     let stream = Envelope.encodeStream (Envelope.tell [| 1uy; 2uy |])
     bytesEqual "stream prefix" [| 7uy; 0uy; 0uy; 0uy |] (Array.sub stream 0 4)
     let shortStream = Envelope.tryDecodeStream (Array.sub stream 0 (stream.Length - 1))
-    equal "short stream yields fault consumed" Cursor.Fault shortStream.Consumed
+    equal "short stream is incomplete, not a fault" Envelope.Incomplete shortStream.Consumed
+    equal "two prefix bytes is incomplete" Envelope.Incomplete (Envelope.tryDecodeStream [| 7uy; 0uy |]).Consumed
+    // a hostile length prefix near the int maximum: incomplete (it cannot be here yet), never a raise
+    let hostile = Envelope.tryDecodeStream [| 0xFFuy; 0xFFuy; 0xFFuy; 0x7Fuy |]
+    equal "hostile length prefix is incomplete" Envelope.Incomplete hostile.Consumed
+    let wrapped = Envelope.tryDecodeStream [| 0xFCuy; 0xFFuy; 0xFFuy; 0x7Fuy |]
+    equal "wrapping length prefix is incomplete" Envelope.Incomplete wrapped.Consumed
+    // a whole frame that is malformed is a fault the caller must not retry
+    let tooBig = Envelope.tryDecodeStream [| 0uy; 0uy; 0uy; 0x80uy |]
+    equal "prefix beyond the platform int faults" Cursor.Fault tooBig.Consumed
+    let noHeader = Envelope.tryDecodeStream [| 0uy; 0uy; 0uy; 0uy |]
+    equal "zero-length body faults" Cursor.Fault noHeader.Consumed
+    let badKind = Envelope.tryDecodeStream [| 5uy; 0uy; 0uy; 0uy; 9uy; 0uy; 0uy; 0uy; 0uy |]
+    equal "unknown kind in a whole frame faults" Cursor.Fault badKind.Consumed
     let hello = Envelope.hello 1 "abc123"
     equal "hello is control" FrameKind.Control hello.Kind
     bytesEqual "hello payload" [| 0x02uy; 0x06uy; 0x61uy; 0x62uy; 0x63uy; 0x31uy; 0x32uy; 0x33uy |] hello.Payload
@@ -40,3 +53,9 @@ let run () =
     equal "hello consumed" 8 hc
     let _, notHello = Envelope.tryReadHello (Envelope.tell hello.Payload)
     equal "hello on a tell faults" Cursor.Fault notHello
+    // an epoch outside int32 faults rather than wrapping to a false match
+    let wide : byte array = Array.zeroCreate 32
+    let w1 = Encoder.writeInt wide 0 4294967297L
+    let w2 = Encoder.writeString wide w1 "x"
+    let _, wideNext = Envelope.tryReadHello (Envelope.control (Array.sub wide 0 w2))
+    equal "out-of-range epoch faults" Cursor.Fault wideNext

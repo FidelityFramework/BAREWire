@@ -39,6 +39,14 @@ module FindingKind =
     let PointerInSharedLayout: string = "pointer-in-shared-layout"
     [<Literal>]
     let NegativeLimit: string = "negative-limit"
+    [<Literal>]
+    let InvalidSlot: string = "invalid-slot"
+    [<Literal>]
+    let NegativeRate: string = "negative-rate"
+    [<Literal>]
+    let NonPositiveFrequency: string = "non-positive-frequency"
+    [<Literal>]
+    let BaseMisaligned: string = "base-misaligned"
 
 /// The consistency check on a description (docs/11): every tag is one the
 /// vocabulary names, every name reference resolves, capacities are positive
@@ -125,6 +133,15 @@ module Check =
             j <- j + 1
         seen
 
+    let private indexOfEndpointIn (endpoints: Endpoint array) (name: string) : int =
+        let n = Array.length endpoints
+        let mutable i = 0
+        let mutable found = -1
+        while found < 0 && i < n do
+            if (Array.get endpoints i).Name = name then found <- i
+            i <- i + 1
+        found
+
     let private endpointSeenBefore (endpoints: Endpoint array) (upto: int) (name: string) : bool =
         let mutable seen = false
         let mutable j = 0
@@ -162,8 +179,16 @@ module Check =
             if s.Kind = MemoryKind.Map then checkTag acc8 s.Name "map kind" (MapKind.isValid s.MapKind) s.MapKind
             elif String.length s.MapKind > 0 then push acc8 (finding s.Name FindingKind.UnknownTag "map kind declared on a space that is not a map")
             else acc8
-        if Availability.wellFormed s.Since s.Until then acc9
-        else push acc9 (finding s.Name FindingKind.InvalidAvailability (Text.append (Text.append "available since " s.Since) (Text.append " until " s.Until)))
+        let baseValue =
+            match s.Base with
+            | Some b -> b
+            | None -> 0L
+        let acc10 =
+            if s.Alignment > 0 && baseValue % int64 s.Alignment <> 0L then
+                push acc9 (finding s.Name FindingKind.BaseMisaligned (Text.append (Text.append "declared base " (Fmt.hex64 (uint64 baseValue))) (Text.append " is not a multiple of the declared alignment " (Fmt.ofInt s.Alignment))))
+            else acc9
+        if Availability.wellFormed s.Since s.Until then acc10
+        else push acc10 (finding s.Name FindingKind.InvalidAvailability (Text.append (Text.append "available since " s.Since) (Text.append " until " s.Until)))
 
     /// Two spaces with declared bases overlap when their ranges intersect.
     let private overlaps (a: MemorySpace) (b: MemorySpace) : bool =
@@ -223,9 +248,13 @@ module Check =
                     let msg = Text.append (Text.append (Text.append "buffer capacity " (Fmt.ofInt64 b.Capacity)) " exceeds the capacity of its space: ") (Fmt.ofInt64 s.Capacity)
                     push acc7 (finding b.Name FindingKind.CapacityExceedsSpace msg)
                 else acc7
-        if Framing.hasDelimiter b.Framing && not (BufferSchema.hasDelimiter b) then
-            push acc8 (finding b.Name FindingKind.MissingDelimiter (Text.append "delimited framing declares no delimiter byte (0..255): " (Fmt.ofInt b.Delimiter)))
-        else acc8
+        let acc9 =
+            if Framing.hasDelimiter b.Framing && not (BufferSchema.hasDelimiter b) then
+                push acc8 (finding b.Name FindingKind.MissingDelimiter (Text.append "delimited framing declares no delimiter byte (0..255): " (Fmt.ofInt b.Delimiter)))
+            else acc8
+        let ringOk = b.Framing <> Framing.Ring || (b.Slot > 0 && int64 b.Slot <= b.Capacity && b.Capacity % int64 b.Slot = 0L)
+        if ringOk then acc9
+        else push acc9 (finding b.Name FindingKind.InvalidSlot (Text.append "ring framing needs a positive slot that divides the capacity: " (Fmt.ofInt b.Slot)))
 
     let private checkEndpoint (acc: Finding array) (surface: BoundarySurface) (index: int) : Finding array =
         let e = Array.get surface.Endpoints index
@@ -251,6 +280,31 @@ module Check =
             i <- i + 1
         checkContracts out s.Name s.Contracts
 
+    /// True when an endpoint with this name is declared on a surface before `upto`.
+    let private endpointOnEarlierSurface (surfaces: BoundarySurface array) (upto: int) (name: string) : bool =
+        let mutable i = 0
+        let mutable seen = false
+        while not seen && i < upto do
+            seen <- indexOfEndpointIn (Array.get surfaces i).Endpoints name >= 0
+            i <- i + 1
+        seen
+
+    let private checkEndpointNamesAcrossSurfaces (acc: Finding array) (surfaces: BoundarySurface array) : Finding array =
+        let n = Array.length surfaces
+        let mutable out = acc
+        let mutable i = 1
+        while i < n do
+            let s = Array.get surfaces i
+            let ne = Array.length s.Endpoints
+            let mutable j = 0
+            while j < ne do
+                let e = Array.get s.Endpoints j
+                if endpointOnEarlierSurface surfaces i e.Name then
+                    out <- push out (finding (dotted s.Name e.Name) FindingKind.DuplicateName "endpoint name is declared on another surface too; transports resolve endpoints by name")
+                j <- j + 1
+            i <- i + 1
+        out
+
     let private checkTransport (acc: Finding array) (desc: PlatformDescription) (index: int) : Finding array =
         let t = Array.get desc.Transports index
         let acc1 = checkName acc "transport" t.Name
@@ -264,8 +318,11 @@ module Check =
             if not (PlatformDescription.hasEndpoint desc name) then
                 out <- push out (finding t.Name FindingKind.UnknownEndpoint (Text.append (Text.append "transport names endpoint '" name) "', which no surface declares"))
             i <- i + 1
-        if Availability.wellFormed t.Since t.Until then out
-        else push out (finding t.Name FindingKind.InvalidAvailability (Text.append (Text.append "available since " t.Since) (Text.append " until " t.Until)))
+        let out2 =
+            if t.RateHz < 0L || t.MaxUnit < 0L then push out (finding t.Name FindingKind.NegativeRate "transport rate and largest unit must be zero (undeclared) or positive")
+            else out
+        if Availability.wellFormed t.Since t.Until then out2
+        else push out2 (finding t.Name FindingKind.InvalidAvailability (Text.append (Text.append "available since " t.Since) (Text.append " until " t.Until)))
 
     let private limitSeenBefore (limits: Limit array) (upto: int) (name: string) : bool =
         let mutable i = 0
@@ -291,7 +348,7 @@ module Check =
             let c = Array.get l.Clocks i
             out <- checkName out "clock" c.Name
             if c.FrequencyHz <= 0L then
-                out <- push out (finding c.Name FindingKind.NonPositiveCapacity (Text.append "clock frequency is not positive: " (Fmt.ofInt64 c.FrequencyHz)))
+                out <- push out (finding c.Name FindingKind.NonPositiveFrequency (Text.append "clock frequency is not positive: " (Fmt.ofInt64 c.FrequencyHz)))
             i <- i + 1
         let nr = Array.length l.Resets
         let mutable j = 0
@@ -301,6 +358,8 @@ module Check =
             j <- j + 1
         out
 
+    // SUBSET(option-argument): the core is matched here and read through
+    // field access; the preferred spelling matches at the call site.
     let private checkCore (acc: Finding array) (core: TargetCore option) : Finding array =
         match core with
         | None -> acc
@@ -335,6 +394,7 @@ module Check =
         while k < nsf do
             acc <- checkSurface acc desc.Surfaces k
             k <- k + 1
+        acc <- checkEndpointNamesAcrossSurfaces acc desc.Surfaces
         let nt = Array.length desc.Transports
         let mutable m = 0
         while m < nt do
@@ -370,10 +430,18 @@ module Check =
         while i < nb do
             let b = Array.get desc.Buffers i
             let layout = layoutOf b.Schema
-            let pointerFree =
+            // SUBSET(option-argument): the bound layout is read through field
+            // access; the preferred spelling passes `l` to `Layout.isPointerFree`.
+            let fields =
                 match layout with
-                | Some l -> BAREWire.Hardware.Layout.isPointerFree l
-                | None -> true
+                | Some l -> l.Fields
+                | None -> Array.zeroCreate 0
+            let mutable pointerFree = true
+            let mutable k = 0
+            while k < Array.length fields do
+                if (Array.get fields k).Repr = BAREWire.Hardware.Repr.Pointer then
+                    pointerFree <- false
+                k <- k + 1
             if sharedSpace desc b && not pointerFree then
                 acc <- push acc (finding b.Name FindingKind.PointerInSharedLayout (Text.append (Text.append "buffer on shared space " b.Space) " has a layout with a pointer field"))
             i <- i + 1

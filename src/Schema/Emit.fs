@@ -6,7 +6,7 @@ open BAREWire.Encoding
 /// schema-shared contract mode (Readiness Audit §1, §4 step 14). Emission
 /// is deterministic: declarations in declaration order, fields in wire
 /// order, explicit enum values, union tags spelled only where they break
-/// the implicit sequence. `data<n>` and `list<T>[n]` are the fixed-length
+/// the implicit sequence. `data[n]` and `list<T>[n]` are the BARE schema language's fixed-length
 /// spellings (docs/03).
 module Emit =
 
@@ -34,7 +34,7 @@ module Emit =
     let rec typeText (schema: SchemaDefinition) (t: SchemaType) : string =
         match t with
         | Prim k -> k
-        | FixedData n -> Text.append (Text.append "data<" (Fmt.ofInt n)) ">"
+        | FixedData n -> Text.append (Text.append "data[" (Fmt.ofInt n)) "]"
         | Enum spec -> enumText spec
         | Optional inner -> Text.append (Text.append "optional<" (typeText schema inner)) ">"
         | List inner -> Text.append (Text.append "list<" (typeText schema inner)) ">"

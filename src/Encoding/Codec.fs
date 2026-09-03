@@ -21,7 +21,8 @@ module Codec =
     /// declared fact, not a growth policy: a buffer schema names it, and
     /// exceeding it is a checked fault.
     let encode (capacity: int) (write: byte array -> int -> 'a -> int) (value: 'a) : byte array * int =
-        let data : byte array = Array.zeroCreate (if capacity < 0 then 0 else capacity)
+        let size = if capacity < 0 then 0 else capacity
+        let data : byte array = Array.zeroCreate size
         let next = write data 0 value
         if Cursor.isOk next then (Array.sub data 0 next, next) else (Array.zeroCreate 0, Cursor.Fault)
 
