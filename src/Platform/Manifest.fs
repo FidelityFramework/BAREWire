@@ -37,24 +37,15 @@ module Manifest =
     let private delimiterText (buffer: BufferSchema) : string =
         if Framing.hasDelimiter buffer.Framing && buffer.Delimiter >= 0 then Fmt.ofInt buffer.Delimiter else "none"
 
-    /// The `core` line, or "" when the description has no core. The match
-    /// lives here so the bound value is only read through field access.
-    // SUBSET(option-argument): preferred spelling is `match desc.Core with
-    // | Some c -> coreLine c | None -> ""` at the call site; the current
-    // Composer snapshot types a `Some`-bound variable passed as a function
-    // argument as the payload slot (`int64`), while field access on it types
-    // correctly.
-    let private coreLine (core: TargetCore option) : string =
-        match core with
-        | None -> ""
-        | Some c ->
-            let l1 = sp "core" (kv "os" (orNone c.Os))
-            let l2 = sp l1 (kv "arch" (orNone c.Arch))
-            let l3 = sp l2 (kv "word" (Fmt.ofInt c.WordSizeBits))
-            let l4 = sp l3 (kv "endian" (orNone c.Endianness))
-            let l5 = sp l4 (kv "runtime" (orNone c.Runtime))
-            let l6 = sp l5 (kv "triple" (orNone c.Triple))
-            sp l6 (kv "cpu" (orNone c.CpuModel))
+    /// The `core` line.
+    let private coreLine (c: TargetCore) : string =
+        let l1 = sp "core" (kv "os" (orNone c.Os))
+        let l2 = sp l1 (kv "arch" (orNone c.Arch))
+        let l3 = sp l2 (kv "word" (Fmt.ofInt c.WordSizeBits))
+        let l4 = sp l3 (kv "endian" (orNone c.Endianness))
+        let l5 = sp l4 (kv "runtime" (orNone c.Runtime))
+        let l6 = sp l5 (kv "triple" (orNone c.Triple))
+        sp l6 (kv "cpu" (orNone c.CpuModel))
 
     let private spaceLine (s: MemorySpace) : string =
         let l1 = sp (sp "space" s.Name) (kv "kind" s.Kind)
@@ -158,9 +149,9 @@ module Manifest =
         while q < nn do
             out <- line out (Text.append "# note " (Array.get desc.Notes q))
             q <- q + 1
-        let coreText = coreLine desc.Core
-        if String.length coreText > 0 then
-            out <- line out coreText
+        match desc.Core with
+        | Some c -> out <- line out (coreLine c)
+        | None -> ()
         let ns = Array.length desc.Spaces
         let mutable i = 0
         while i < ns do

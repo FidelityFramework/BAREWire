@@ -126,8 +126,10 @@ module Envelope =
     /// and retry); `Cursor.Fault` when a whole frame is present but malformed
     /// (a body shorter than the header, an unknown kind byte, or a prefix
     /// that cannot fit), which a caller treats as a corrupt stream.
-    /// SUBSET(value-match): a record result rather than a three-case union,
-    /// which the preferred spelling would be.
+    // SUBSET(three-case-match): a record result rather than a three-case
+    // union (`Decoded of Frame * int | Incomplete | Malformed`), which the
+    // preferred spelling would be; the current Composer snapshot cannot match
+    // three cases in value position.
     let tryDecodeStream (bytes: byte array) : StreamDecode =
         let len32, o1 = Decoder.readU32 bytes 0
         let prefixOk = Cursor.isOk o1 && len32 <= uint32 MaxStreamBody

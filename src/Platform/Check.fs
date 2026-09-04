@@ -358,25 +358,23 @@ module Check =
             j <- j + 1
         out
 
-    // SUBSET(option-argument): the core is matched here and read through
-    // field access; the preferred spelling matches at the call site.
-    let private checkCore (acc: Finding array) (core: TargetCore option) : Finding array =
-        match core with
-        | None -> acc
-        | Some c ->
-            let acc1 = checkName acc "core os" c.Os
-            let acc2 = checkName acc1 "core arch" c.Arch
-            let endianOk = c.Endianness = "little" || c.Endianness = "big" || String.length c.Endianness = 0
-            let acc3 = checkTag acc2 "core" "endianness" endianOk c.Endianness
-            if isPowerOfTwo c.WordSizeBits then acc3
-            else push acc3 (finding "core" FindingKind.AlignmentNotPowerOfTwo (Text.append "word size in bits is not a power of two: " (Fmt.ofInt c.WordSizeBits)))
+    let private checkCore (acc: Finding array) (c: TargetCore) : Finding array =
+        let acc1 = checkName acc "core os" c.Os
+        let acc2 = checkName acc1 "core arch" c.Arch
+        let endianOk = c.Endianness = "little" || c.Endianness = "big" || String.length c.Endianness = 0
+        let acc3 = checkTag acc2 "core" "endianness" endianOk c.Endianness
+        if isPowerOfTwo c.WordSizeBits then acc3
+        else push acc3 (finding "core" FindingKind.AlignmentNotPowerOfTwo (Text.append "word size in bits is not a power of two: " (Fmt.ofInt c.WordSizeBits)))
 
     /// Every finding about the description, in declaration order; empty when
     /// the description is consistent.
     let run (desc: PlatformDescription) : Finding array =
         let start : Finding array = Array.zeroCreate 0
         let acc0 = checkName start "description" desc.Id
-        let acc1 = checkCore acc0 desc.Core
+        let acc1 =
+            match desc.Core with
+            | Some c -> checkCore acc0 c
+            | None -> acc0
         let ns = Array.length desc.Spaces
         let mutable acc = acc1
         let mutable i = 0
@@ -430,18 +428,10 @@ module Check =
         while i < nb do
             let b = Array.get desc.Buffers i
             let layout = layoutOf b.Schema
-            // SUBSET(option-argument): the bound layout is read through field
-            // access; the preferred spelling passes `l` to `Layout.isPointerFree`.
-            let fields =
+            let pointerFree =
                 match layout with
-                | Some l -> l.Fields
-                | None -> Array.zeroCreate 0
-            let mutable pointerFree = true
-            let mutable k = 0
-            while k < Array.length fields do
-                if (Array.get fields k).Repr = BAREWire.Hardware.Repr.Pointer then
-                    pointerFree <- false
-                k <- k + 1
+                | Some l -> BAREWire.Hardware.Layout.isPointerFree l
+                | None -> true
             if sharedSpace desc b && not pointerFree then
                 acc <- push acc (finding b.Name FindingKind.PointerInSharedLayout (Text.append (Text.append "buffer on shared space " b.Space) " has a layout with a pointer field"))
             i <- i + 1
