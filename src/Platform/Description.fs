@@ -139,9 +139,39 @@ type LifecycleFacts = {
     Persistence: Persistence
 }
 
+/// One named width dimension the core declares (clef-lang-spec
+/// ntu-dimensional-architecture.md §7.1): the language names a dimension
+/// (`Pointer`, `Register`, a lane, an accumulator) and the description says
+/// how many bits it is on this target. A dimension the description does not
+/// declare has no width: the compiler reports the site that needed it and
+/// never supplies a number of its own (plan D1, D8).
+type WidthDeclaration = {
+    Name: string
+    Bits: int
+}
+
+/// One numeric representation the target offers (platform-bindings.md,
+/// descriptor requirements; numeric-selection.md §7, §9 item 6). The
+/// language carries only the name (`int32`, `float64`, `posit32`); what
+/// that name is on this target is declared here. `Capability`, `Family`
+/// and `Boundary` are tags from `Tags.fs`. `MinMagnitude` and
+/// `MaxMagnitude` bound the representable range, the least and the greatest
+/// finite value, as exact decimal text: the group is Z, so a bound is a
+/// declared number, never a float the host rounds.
+type Representation = {
+    Name: string
+    Capability: Capability
+    Family: RepresentationFamily
+    Bits: int
+    MinMagnitude: string
+    MaxMagnitude: string
+    Boundary: Boundary
+}
+
 /// The ISA and ABI identity of a processor core: the `TargetCore` block of
-/// `Fidelity.Platform/docs/CANONICAL_PLATFORM_SPEC.md`. `Triple` and
-/// `CpuModel` are "" when the toolchain derives them.
+/// `Fidelity.Platform/docs/CANONICAL_PLATFORM_SPEC.md`, with the width
+/// dimensions and the numeric representations it declares (plan D8).
+/// `Triple` and `CpuModel` are "" when the toolchain derives them.
 type TargetCore = {
     Os: string
     Arch: string
@@ -150,6 +180,11 @@ type TargetCore = {
     Runtime: string
     Triple: string
     CpuModel: string
+    /// The width dimensions by name: a CPU declares `Pointer` and `Register`.
+    Widths: WidthDeclaration array
+    /// The numeric representations the target offers, each with its
+    /// capability, range and boundary semantics.
+    Representations: Representation array
 }
 
 /// One named numeric limit the host imposes.
@@ -556,9 +591,21 @@ module Lifecycle =
 /// when derived by the toolchain, so the record stays a plain table.
 module TargetCore =
 
-    /// A core with the toolchain deriving the triple and CPU model.
+    /// A core with the toolchain deriving the triple and CPU model, and no
+    /// width or representation declared yet; `withWidths` and
+    /// `withRepresentations` add them. An undeclared width is not a
+    /// default: the compiler refuses a site that needs it.
     let create (os: string) (arch: string) (wordSizeBits: int) (endianness: string) (runtime: string) : TargetCore =
-        { Os = os; Arch = arch; WordSizeBits = wordSizeBits; Endianness = endianness; Runtime = runtime; Triple = ""; CpuModel = "" }
+        { Os = os; Arch = arch; WordSizeBits = wordSizeBits; Endianness = endianness; Runtime = runtime; Triple = ""; CpuModel = ""
+          Widths = Array.zeroCreate 0; Representations = Array.zeroCreate 0 }
+
+    /// The same core declaring these width dimensions.
+    let withWidths (core: TargetCore) (widths: WidthDeclaration array) : TargetCore =
+        { core with Widths = widths }
+
+    /// The same core offering these numeric representations.
+    let withRepresentations (core: TargetCore) (representations: Representation array) : TargetCore =
+        { core with Representations = representations }
 
     /// The same core with an explicit triple.
     let withTriple (core: TargetCore) (triple: string) : TargetCore =
@@ -567,6 +614,50 @@ module TargetCore =
     /// The same core with an explicit CPU model.
     let withCpuModel (core: TargetCore) (cpuModel: string) : TargetCore =
         { core with CpuModel = cpuModel }
+
+/// Constructors for width dimensions.
+module WidthDeclaration =
+
+    /// The dimension with this name at this many bits.
+    let create (name: string) (bits: int) : WidthDeclaration =
+        { Name = name; Bits = bits }
+
+    /// The address width; a CPU declares it.
+    [<Literal>]
+    let Pointer = "Pointer"
+
+    /// The natural computational word; a CPU declares it.
+    [<Literal>]
+    let Register = "Register"
+
+/// Constructors for numeric representations. Each names the family it
+/// declares; the range bounds are exact decimal text.
+module Representation =
+
+    /// A representation of any family, every field stated.
+    let create (name: string) (capability: Capability) (family: RepresentationFamily) (bits: int) (minMagnitude: string) (maxMagnitude: string) (boundary: Boundary) : Representation =
+        { Name = name; Capability = capability; Family = family; Bits = bits; MinMagnitude = minMagnitude; MaxMagnitude = maxMagnitude; Boundary = boundary }
+
+    /// A native two's-complement signed integer that wraps at its boundary.
+    let signedInt (name: string) (bits: int) (minValue: string) (maxValue: string) : Representation =
+        create name Capability.Native RepresentationFamily.Int bits minValue maxValue Boundary.Wrap
+
+    /// A native unsigned integer that wraps at its boundary.
+    let unsignedInt (name: string) (bits: int) (maxValue: string) : Representation =
+        create name Capability.Native RepresentationFamily.UInt bits "0" maxValue Boundary.Wrap
+
+    /// A native IEEE 754 binary format: symmetric range, exact boundary (its
+    /// overflow is its own infinity).
+    let ieee (name: string) (bits: int) (maxFinite: string) : Representation =
+        create name Capability.Native RepresentationFamily.Ieee bits (Text.append "-" maxFinite) maxFinite Boundary.Exact
+
+    /// A posit format that saturates at maxpos; capability as declared.
+    let posit (name: string) (capability: Capability) (bits: int) (maxPos: string) : Representation =
+        create name capability RepresentationFamily.Posit bits (Text.append "-" maxPos) maxPos Boundary.Saturate
+
+    /// The same representation with another capability.
+    let withCapability (representation: Representation) (capability: Capability) : Representation =
+        { representation with Capability = capability }
 
 /// Constructors for limits.
 module Limit =

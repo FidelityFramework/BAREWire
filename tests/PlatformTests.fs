@@ -30,7 +30,12 @@ let run () =
     let readContract = Contract.assumed "read-bound" "writes at most count bytes into buf; returns n <= count; n = 0 is end of input" [| "CWE-120" |]
     let linux : PlatformDescription =
         { Id = "cpu-linux-x86_64"; DisplayName = "Linux x86-64 (libc)"; Substrate = "CPU"
-          Core = Some (TargetCore.withTriple (TargetCore.create "linux" "x86_64" 64 "little" "libc") "x86_64-unknown-linux-gnu")
+          Core = Some (TargetCore.withRepresentations (TargetCore.withWidths (TargetCore.withTriple (TargetCore.create "linux" "x86_64" 64 "little" "libc") "x86_64-unknown-linux-gnu")
+                                                          [| WidthDeclaration.create WidthDeclaration.Pointer 64; WidthDeclaration.create WidthDeclaration.Register 64 |])
+                         [| Representation.signedInt "int32" 32 "-2147483648" "2147483647"
+                            Representation.unsignedInt "uint8" 8 "255"
+                            Representation.ieee "float64" 64 "179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368"
+                            Representation.posit "posit32" Capability.Emulated 32 "1329227995784915872903807060280344576" |])
           Spaces = [|
             MemorySpace.withAccess (MemorySpace.withBase (MemorySpace.create "text" MemoryKind.Text 4096L 4096) 0x401000L) Access.ReadExecute
             MemorySpace.withAccess (MemorySpace.withBase (MemorySpace.create "rodata" MemoryKind.Rodata 4096L 4096) 0x402000L) Access.ReadOnly
@@ -44,7 +49,30 @@ let run () =
           Notes = [| "bases are those of a non-PIE static ELF" |]
           Limits = [||] }
     equal "linux description consistent" 0 (Array.length (Check.run linux))
+    // The core's declarations (plan D8): each width and representation named once, tags from the
+    // vocabulary, the Register width agreeing with the word size.
+    let withCore (core: TargetCore) : PlatformDescription = { linux with Core = Some core }
+    let linuxCore =
+        match linux.Core with
+        | Some c -> c
+        | None -> TargetCore.create "linux" "x86_64" 64 "little" "libc"
+    let dupWidth = withCore (TargetCore.withWidths linuxCore [| WidthDeclaration.create "Register" 64; WidthDeclaration.create "Register" 32 |])
+    check "duplicate width name is a finding" (Check.run dupWidth |> Array.exists (fun f -> f.Kind = FindingKind.DuplicateName)) (Check.explain (Check.run dupWidth))
+    let regMismatch = withCore (TargetCore.withWidths linuxCore [| WidthDeclaration.create "Register" 32 |])
+    check "register width must agree with the word size" (Check.run regMismatch |> Array.exists (fun f -> f.Kind = FindingKind.WidthMismatch)) (Check.explain (Check.run regMismatch))
+    let dupRep = withCore (TargetCore.withRepresentations linuxCore [| Representation.unsignedInt "uint8" 8 "255"; Representation.unsignedInt "uint8" 8 "255" |])
+    check "duplicate representation name is a finding" (Check.run dupRep |> Array.exists (fun f -> f.Kind = FindingKind.DuplicateName)) (Check.explain (Check.run dupRep))
+    let badCap = withCore (TargetCore.withRepresentations linuxCore [| Representation.withCapability (Representation.unsignedInt "uint8" 8 "255") (Capability.Unknown "fast") |])
+    check "unknown capability is a finding" (Check.run badCap |> Array.exists (fun f -> f.Kind = FindingKind.UnknownTag)) (Check.explain (Check.run badCap))
+    let badFamily = withCore (TargetCore.withRepresentations linuxCore [| Representation.create "bf16" Capability.Native (RepresentationFamily.Unknown "brain") 16 "-1" "1" Boundary.Exact |])
+    check "unknown family is a finding" (Check.run badFamily |> Array.exists (fun f -> f.Kind = FindingKind.UnknownTag)) (Check.explain (Check.run badFamily))
+    let badBoundary = withCore (TargetCore.withRepresentations linuxCore [| Representation.create "int32" Capability.Native RepresentationFamily.Int 32 "-2147483648" "2147483647" (Boundary.Unknown "trap") |])
+    check "unknown boundary is a finding" (Check.run badBoundary |> Array.exists (fun f -> f.Kind = FindingKind.UnknownTag)) (Check.explain (Check.run badBoundary))
+    let noRange = withCore (TargetCore.withRepresentations linuxCore [| Representation.create "int32" Capability.Native RepresentationFamily.Int 32 "" "" Boundary.Wrap |])
+    check "representation without range bounds is a finding" (Check.run noRange |> Array.exists (fun f -> f.Kind = FindingKind.MissingRange)) (Check.explain (Check.run noRange))
     let manifest = Manifest.emit linux
+    check "manifest declares the Register width" (manifest.Contains "width Register bits=64") manifest
+    check "manifest declares posit32 emulated" (manifest.Contains "representation posit32 capability=emulated family=posit bits=32") manifest
     check "manifest declares consoleReadln" (manifest.Contains "buffer consoleReadln schema=str capacity=1024 framing=delimited delimiter=10 trim=true space=arena") manifest
     check "manifest MEMORY block" (manifest.Contains "rodata (r) : ORIGIN = 0x402000, LENGTH = 4096") manifest
     check "manifest space availability" (manifest.Contains "since=none until=none") manifest

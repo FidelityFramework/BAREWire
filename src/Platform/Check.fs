@@ -47,6 +47,12 @@ module FindingKind =
     let NonPositiveFrequency: string = "non-positive-frequency"
     [<Literal>]
     let BaseMisaligned: string = "base-misaligned"
+    [<Literal>]
+    let NonPositiveWidth: string = "non-positive-width"
+    [<Literal>]
+    let MissingRange: string = "missing-range"
+    [<Literal>]
+    let WidthMismatch: string = "width-mismatch"
 
 /// The consistency check on a description (docs/11): every tag is one the
 /// vocabulary names, every name reference resolves, capacities are positive
@@ -358,13 +364,79 @@ module Check =
             j <- j + 1
         out
 
+    let private widthSeenBefore (widths: WidthDeclaration array) (upto: int) (name: string) : bool =
+        let mutable seen = false
+        let mutable j = 0
+        while not seen && j < upto do
+            seen <- (Array.get widths j).Name = name
+            j <- j + 1
+        seen
+
+    let private representationSeenBefore (representations: Representation array) (upto: int) (name: string) : bool =
+        let mutable seen = false
+        let mutable j = 0
+        while not seen && j < upto do
+            seen <- (Array.get representations j).Name = name
+            j <- j + 1
+        seen
+
+    /// A width dimension: a name declared once, at a positive number of bits.
+    let private checkWidth (acc: Finding array) (widths: WidthDeclaration array) (index: int) : Finding array =
+        let w = Array.get widths index
+        let acc1 = checkName acc "width" w.Name
+        let acc2 = checkDuplicate acc1 "width" w.Name (widthSeenBefore widths index w.Name)
+        if w.Bits > 0 then acc2
+        else push acc2 (finding w.Name FindingKind.NonPositiveWidth (Text.append "width in bits is not positive: " (Fmt.ofInt w.Bits)))
+
+    /// A representation: a name declared once, tags the vocabulary names, a
+    /// positive number of bits, and both range bounds stated.
+    let private checkRepresentation (acc: Finding array) (representations: Representation array) (index: int) : Finding array =
+        let r = Array.get representations index
+        let acc1 = checkName acc "representation" r.Name
+        let acc2 = checkDuplicate acc1 "representation" r.Name (representationSeenBefore representations index r.Name)
+        let acc3 = checkTag acc2 r.Name "capability" (Capability.isValid r.Capability) r.Capability
+        let acc4 = checkTag acc3 r.Name "family" (RepresentationFamily.isValid r.Family) r.Family
+        let acc5 = checkTag acc4 r.Name "boundary" (Boundary.isValid r.Boundary) r.Boundary
+        let acc6 =
+            if r.Bits > 0 then acc5
+            else push acc5 (finding r.Name FindingKind.NonPositiveWidth (Text.append "representation width in bits is not positive: " (Fmt.ofInt r.Bits)))
+        if String.length r.MinMagnitude > 0 && String.length r.MaxMagnitude > 0 then acc6
+        else push acc6 (finding r.Name FindingKind.MissingRange "representation declares no range bounds (MinMagnitude and MaxMagnitude as decimal text)")
+
+    /// The declared Register width, or 0 when the core declares none.
+    let private registerBits (widths: WidthDeclaration array) : int =
+        let n = Array.length widths
+        let mutable i = 0
+        let mutable bits = 0
+        while bits = 0 && i < n do
+            let w = Array.get widths i
+            if w.Name = WidthDeclaration.Register then bits <- w.Bits
+            i <- i + 1
+        bits
+
     let private checkCore (acc: Finding array) (c: TargetCore) : Finding array =
         let acc1 = checkName acc "core os" c.Os
         let acc2 = checkName acc1 "core arch" c.Arch
         let endianOk = c.Endianness = "little" || c.Endianness = "big" || String.length c.Endianness = 0
         let acc3 = checkTag acc2 "core" "endianness" endianOk c.Endianness
-        if isPowerOfTwo c.WordSizeBits then acc3
-        else push acc3 (finding "core" FindingKind.AlignmentNotPowerOfTwo (Text.append "word size in bits is not a power of two: " (Fmt.ofInt c.WordSizeBits)))
+        let acc4 =
+            if isPowerOfTwo c.WordSizeBits then acc3
+            else push acc3 (finding "core" FindingKind.AlignmentNotPowerOfTwo (Text.append "word size in bits is not a power of two: " (Fmt.ofInt c.WordSizeBits)))
+        let nw = Array.length c.Widths
+        let mutable out = acc4
+        let mutable i = 0
+        while i < nw do
+            out <- checkWidth out c.Widths i
+            i <- i + 1
+        let nr = Array.length c.Representations
+        let mutable j = 0
+        while j < nr do
+            out <- checkRepresentation out c.Representations j
+            j <- j + 1
+        // The word size and a declared Register width state one fact; they must agree.
+        let reg = registerBits c.Widths
+        if reg = 0 || reg = c.WordSizeBits then out
+        else push out (finding "core" FindingKind.WidthMismatch (Text.append (Text.append "declared Register width " (Fmt.ofInt reg)) (Text.append " disagrees with the word size " (Fmt.ofInt c.WordSizeBits))))
 
     /// Every finding about the description, in declaration order; empty when
     /// the description is consistent.

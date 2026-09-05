@@ -312,3 +312,79 @@ module Logic =
     /// True when the standing is a trusted-base assumption rather than a proof.
     let isAssumed (l: Logic) : bool =
         l = Assumed
+
+/// The capability a target has for one numeric representation
+/// (clef-lang-spec numeric-selection.md §7): native hardware, emulated in
+/// software, or not offered at all. A representation declared `Unavailable`
+/// is named so a seal of that name is refused by declaration rather than by
+/// absence.
+type Capability = string
+
+[<RequireQualifiedAccess>]
+module Capability =
+    [<Literal>]
+    let Native: Capability = "native"
+    [<Literal>]
+    let Emulated: Capability = "emulated"
+    [<Literal>]
+    let Unavailable: Capability = "unavailable"
+
+    /// A capability the library does not name; `Check.run` reports it.
+    let Unknown (value: string) : Capability = value
+
+    /// True when the tag is one the library names.
+    let isValid (c: Capability) : bool =
+        c = Native || c = Emulated || c = Unavailable
+
+/// The family of a numeric representation: the vocabulary a declaration may
+/// use (plan D8). Adding a family is a declaration, not a language change.
+type RepresentationFamily = string
+
+[<RequireQualifiedAccess>]
+module RepresentationFamily =
+    /// Two's-complement signed integer.
+    [<Literal>]
+    let Int: RepresentationFamily = "int"
+    /// Unsigned integer.
+    [<Literal>]
+    let UInt: RepresentationFamily = "uint"
+    /// IEEE 754 binary floating point.
+    [<Literal>]
+    let Ieee: RepresentationFamily = "ieee"
+    /// Posit (unum type III).
+    [<Literal>]
+    let Posit: RepresentationFamily = "posit"
+    /// Fixed point at a declared scale.
+    [<Literal>]
+    let Fixed: RepresentationFamily = "fixed"
+
+    /// A family the library does not name; `Check.run` reports it.
+    let Unknown (value: string) : RepresentationFamily = value
+
+    /// True when the tag is one the library names.
+    let isValid (f: RepresentationFamily) : bool =
+        f = Int || f = UInt || f = Ieee || f = Posit || f = Fixed
+
+/// What an operation does when its result leaves a representation's dynamic
+/// range (numeric-selection.md §9 item 6): a declared fact of the target,
+/// never selected by the language. Wrap on a two's-complement unit; saturate
+/// on a posit unit or a saturating DSP block; exact on fabric where the
+/// width is the range's, and for IEEE, whose boundary is its own overflow to
+/// infinity.
+type Boundary = string
+
+[<RequireQualifiedAccess>]
+module Boundary =
+    [<Literal>]
+    let Wrap: Boundary = "wrap"
+    [<Literal>]
+    let Saturate: Boundary = "saturate"
+    [<Literal>]
+    let Exact: Boundary = "exact"
+
+    /// A boundary the library does not name; `Check.run` reports it.
+    let Unknown (value: string) : Boundary = value
+
+    /// True when the tag is one the library names.
+    let isValid (b: Boundary) : bool =
+        b = Wrap || b = Saturate || b = Exact

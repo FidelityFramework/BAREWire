@@ -47,6 +47,19 @@ module Manifest =
         let l6 = sp l5 (kv "triple" (orNone c.Triple))
         sp l6 (kv "cpu" (orNone c.CpuModel))
 
+    /// A `width` line: one declared dimension.
+    let private widthLine (w: WidthDeclaration) : string =
+        sp (sp "width" w.Name) (kv "bits" (Fmt.ofInt w.Bits))
+
+    /// A `representation` line: one offered numeric representation.
+    let private representationLine (r: Representation) : string =
+        let l1 = sp (sp "representation" r.Name) (kv "capability" r.Capability)
+        let l2 = sp l1 (kv "family" r.Family)
+        let l3 = sp l2 (kv "bits" (Fmt.ofInt r.Bits))
+        let l4 = sp l3 (kv "min" r.MinMagnitude)
+        let l5 = sp l4 (kv "max" r.MaxMagnitude)
+        sp l5 (kv "boundary" r.Boundary)
+
     let private spaceLine (s: MemorySpace) : string =
         let l1 = sp (sp "space" s.Name) (kv "kind" s.Kind)
         let l2 = sp l1 (kv "capacity" (Fmt.ofInt64 s.Capacity))
@@ -150,7 +163,18 @@ module Manifest =
             out <- line out (Text.append "# note " (Array.get desc.Notes q))
             q <- q + 1
         match desc.Core with
-        | Some c -> out <- line out (coreLine c)
+        | Some c ->
+            out <- line out (coreLine c)
+            let nw = Array.length c.Widths
+            let mutable w = 0
+            while w < nw do
+                out <- line out (widthLine (Array.get c.Widths w))
+                w <- w + 1
+            let nr = Array.length c.Representations
+            let mutable r = 0
+            while r < nr do
+                out <- line out (representationLine (Array.get c.Representations r))
+                r <- r + 1
         | None -> ()
         let ns = Array.length desc.Spaces
         let mutable i = 0
