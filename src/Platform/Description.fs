@@ -36,12 +36,22 @@ type MemorySpace = {
 
 /// A contract on a boundary: a statement, its standing (`Logic.Assumed` for
 /// a trusted-base fact on the far side, or the SMT logic it is decided in),
-/// and the weakness ids it guards against (`"CWE-120"`).
+/// and the weakness ids it guards against (`"CWE-120"`). A contract that
+/// bounds the endpoint's return declares the bound as data, not prose
+/// (docs/11, "The TCB, mechanized"; clef Dimensional_Range_Design.md, ruling
+/// 2 of CS-12): `Floor` is the least value the return takes (on Linux the
+/// errno floor, -4095, since a negative return is an errno), and `AtMost`
+/// names the parameter the return is at most (`"count"` for read and write),
+/// so the return's declared range is [Floor, hi(AtMost)]. `AtMost = ""`
+/// declares no return bound, and `Floor` is then not read: the compiler
+/// leaves such a return unobservable (CCS8011) and never supplies a number.
 type Contract = {
     Name: string
     Statement: string
     Logic: Logic
     Refs: string array
+    Floor: int64
+    AtMost: string
 }
 
 /// One endpoint of a surface: a syscall with its number, a pin with its
@@ -487,11 +497,20 @@ module Contract =
     /// A trusted-base assumption: the far side of a boundary, stated and
     /// cited but not proven (docs/11, "The TCB, mechanized").
     let assumed (name: string) (statement: string) (refs: string array) : Contract =
-        { Name = name; Statement = statement; Logic = Logic.Assumed; Refs = refs }
+        { Name = name; Statement = statement; Logic = Logic.Assumed; Refs = refs; Floor = 0L; AtMost = "" }
 
     /// A contract decided in the given logic.
     let proven (name: string) (statement: string) (logic: Logic) (refs: string array) : Contract =
-        { Name = name; Statement = statement; Logic = logic; Refs = refs }
+        { Name = name; Statement = statement; Logic = logic; Refs = refs; Floor = 0L; AtMost = "" }
+
+    /// The same contract with the endpoint's return bounded: at least `floor`,
+    /// at most the parameter `atMost` names.
+    let withReturnBound (contract: Contract) (floor: int64) (atMost: string) : Contract =
+        { contract with Floor = floor; AtMost = atMost }
+
+    /// True when the contract declares a return bound.
+    let boundsReturn (contract: Contract) : bool =
+        String.length contract.AtMost > 0
 
 /// Constructors for endpoints and surfaces.
 module Endpoint =

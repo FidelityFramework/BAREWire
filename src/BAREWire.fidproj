@@ -46,6 +46,8 @@ sources = [
     "Hardware/Abi.fs",
     "Hardware/Validator.fs",
     "Hardware/Btf.fs",
+    # Descriptors: the binding descriptor a generator emits beside an extern (platform-bindings.md Layer 2)
+    "Descriptors/Bindings.fs",
     # Memory: Region and View over the portable byte model (docs/04)
     "Memory/Region.fs",
     "Memory/View.fs",
@@ -54,7 +56,9 @@ sources = [
     "Platform/Description.fs",
     "Platform/Check.fs",
     "Platform/Manifest.fs",
-    "Platform/Obligations.fs"
+    "Platform/Obligations.fs",
+    # The vocabulary's own schema: the declared representation of each integer field of a description record
+    "Platform/Schema.fs"
 ]
 output = "barewire"
 output_kind = "library"

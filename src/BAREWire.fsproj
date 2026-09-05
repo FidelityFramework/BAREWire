@@ -34,6 +34,7 @@
     <Compile Include="Hardware/Abi.fs" />
     <Compile Include="Hardware/Validator.fs" />
     <Compile Include="Hardware/Btf.fs" />
+    <Compile Include="Descriptors/Bindings.fs" />
     <Compile Include="Memory/Region.fs" />
     <Compile Include="Memory/View.fs" />
     <Compile Include="Platform/Tags.fs" />
@@ -41,6 +42,7 @@
     <Compile Include="Platform/Check.fs" />
     <Compile Include="Platform/Manifest.fs" />
     <Compile Include="Platform/Obligations.fs" />
+    <Compile Include="Platform/Schema.fs" />
   </ItemGroup>
 
 </Project>
