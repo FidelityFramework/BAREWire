@@ -34,6 +34,9 @@ module FindingKind =
     /// A field's inline count is zero or negative.
     [<Literal>]
     let ZeroCount: FindingKind = "zero-count"
+    /// The descriptor declares more fields than `Layout.MaxFields`: it is not a descriptor.
+    [<Literal>]
+    let TooManyFields: FindingKind = "too-many-fields"
 
 /// One disagreement between a descriptor and the ABI's natural layout.
 type LayoutFinding = {
@@ -76,7 +79,10 @@ module Validator =
     let private finding (field: string) (kind: FindingKind) (expected: int) (actual: int) (message: string) : LayoutFinding =
         { Field = field; Kind = kind; Expected = expected; Actual = actual; Message = message }
 
-    /// The natural C layout of a field sequence under an ABI profile.
+    /// The natural C layout of a field sequence under an ABI profile. The field-count
+    /// invariant (`Layout.MaxFields`) is checked by `validate`, which every derived
+    /// descriptor is meant to pass through; a sequence beyond it derives a layout that
+    /// `validate` reports as `TooManyFields`.
     let derive (abi: AbiProfile) (name: string) (fields: NamedRepr array) : StructDescriptor =
         let n = Array.length fields
         let out : FieldDescriptor array = Array.zeroCreate n
@@ -100,10 +106,10 @@ module Validator =
         let layout : PeripheralLayout = { Size = Abi.alignUp cursor maxAlign; Alignment = maxAlign; Fields = out }
         { Name = name; Layout = layout; Documentation = None }
 
-    /// Check a declared descriptor against the ABI's natural layout rules.
-    let validate (abi: AbiProfile) (descriptor: StructDescriptor) : LayoutVerdict =
-        let fields = descriptor.Layout.Fields
-        let n = Array.length fields
+    /// The findings of a descriptor whose field count `n` is within `Layout.MaxFields` (the
+    /// caller, `validate`, established that bound, so every count below is derived from a
+    /// bounded one: the finding buffer is sized by it).
+    let private findingsWithin (abi: AbiProfile) (descriptor: StructDescriptor) (fields: FieldDescriptor array) (n: int) : LayoutVerdict =
         // Upper bound on findings: three per field, one per bit field, two for the struct.
         let mutable bitCount = 0
         let mutable k = 0
@@ -169,6 +175,18 @@ module Validator =
             Array.set buf count (finding descriptor.Name FindingKind.AlignmentMismatch maxAlign descriptor.Layout.Alignment (Text.append "declared alignment differs from the natural alignment " (Fmt.ofInt maxAlign)))
             count <- count + 1
         { Agrees = count = 0; ExpectedSize = expectedSize; ExpectedAlignment = maxAlign; Findings = Array.sub buf 0 count }
+
+    /// Check a declared descriptor against the ABI's natural layout rules. A descriptor with
+    /// more fields than `Layout.MaxFields` is not a descriptor: the verdict is that one finding,
+    /// and every other count is derived from a field count within the declared bound.
+    let validate (abi: AbiProfile) (descriptor: StructDescriptor) : LayoutVerdict =
+        let fields = descriptor.Layout.Fields
+        let n = Array.length fields
+        if n > Layout.MaxFields then
+            let only = finding descriptor.Name FindingKind.TooManyFields Layout.MaxFields n (Text.append "the descriptor declares more fields than the vocabulary's maximum of " (Fmt.ofInt Layout.MaxFields))
+            { Agrees = false; ExpectedSize = 0; ExpectedAlignment = 1; Findings = [| only |] }
+        else
+            findingsWithin abi descriptor fields n
 
     /// One line per finding: `field: kind expected N actual M; message`.
     /// A verdict with no findings explains itself as agreement.

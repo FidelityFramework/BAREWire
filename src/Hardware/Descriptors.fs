@@ -202,7 +202,21 @@ module Field =
 /// Layout constructors and lookups.
 module Layout =
 
-    /// A layout of the declared size and alignment over the given fields.
+    /// The most fields a register block or struct descriptor declares. A descriptor is a
+    /// hand-declared layout of a peripheral or a C struct, and no such layout has more fields
+    /// than this: a field count beyond it is not a descriptor. The bound is part of the
+    /// vocabulary so that every count derived from a descriptor's fields is a value in
+    /// `[0, MaxFields]`, checked where a descriptor is validated (`Validator.validate` reports
+    /// `FindingKind.TooManyFields`) and the invariant every builder of a layout keeps (`fits`).
+    [<Literal>]
+    let MaxFields = 4096
+
+    /// True when a field array is within the declared maximum: the invariant a layout keeps.
+    let fits (fields: FieldDescriptor array) : bool =
+        Array.length fields <= MaxFields
+
+    /// A layout of the declared size and alignment over the given fields. The caller keeps
+    /// the field-count invariant (`fits`); `Validator.validate` reports a layout that breaks it.
     let create (size: int) (alignment: int) (fields: FieldDescriptor array) : PeripheralLayout =
         { Size = size; Alignment = alignment; Fields = fields }
 
