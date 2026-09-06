@@ -36,3 +36,38 @@ let run () =
         equal "b byte 4" 0xF9uy region.Data.[4]
     let small = Region.ofArray (Array.zeroCreate 8)
     equal "view over short region refused" true (View.create small layout).IsNone
+
+    // A view is restricted by its declared layout and access rights, even if
+    // the backing region is larger. Refusal must leave every byte untouched.
+    for access, canRead, canWrite in [ AccessKind.ReadOnly, true, false; AccessKind.WriteOnly, false, true; AccessKind.ReadWrite, true, true; "unknown", false, false ] do
+        let bytes = Array.zeroCreate<byte> 8
+        let field = Field.simple "value" 0 Repr.U8 access
+        let view = { Region = Region.ofArray bytes; Layout = Layout.create 1 1 [| field |] }
+        equal (sprintf "view read respects %s" access) canRead (View.readU8 view "value").IsSome
+        equal (sprintf "view write respects %s" access) canWrite (View.writeU8 view "value" 42uy)
+        equal (sprintf "refused %s write leaves bytes unchanged" access) (if canWrite then 42uy else 0uy) bytes.[0]
+    for offset, count, size in [ 1, 1, 1; 0, 0, 1; 0, -1, 1; 0, 3, 2; 0, System.Int32.MaxValue, 1 ] do
+        let bytes = Array.zeroCreate<byte> 8
+        let view = { Region = Region.ofArray bytes; Layout = Layout.create size 1 [| Field.array "value" offset Repr.U8 count AccessKind.ReadWrite |] }
+        equal "view refuses a field outside its declared extent" None (View.readU8 view "value")
+        equal "view cannot write through an invalid field declaration" false (View.writeU8 view "value" 42uy)
+        bytesEqual "invalid field write changes no backing bytes" (Array.zeroCreate 8) bytes
+    for offset, length in [ -1, 4; 1, 8; 0, System.Int32.MinValue; System.Int32.MaxValue, 4 ] do
+        let invalid : Region = { Data = Array.zeroCreate 8; Offset = offset; Length = length }
+        equal "view refuses malformed backing region" true (View.create invalid (Layout.create 0 1 [||])).IsNone
+        equal "malformed region contains no valid access" false (Region.contains invalid 1 1)
+        equal "slice cannot legitimize a malformed region" true (Region.slice invalid 1 1).IsNone
+
+        equal "malformed region has no absolute position" -1 (Region.absolute invalid 1)
+        equal "copy cannot turn invalid metadata into empty data" None (Region.tryToArray invalid)
+    let copied = Region.ofArray [| 1uy; 2uy; 3uy; 4uy |]
+    match Region.slice copied 1 2 with
+    | None -> check "valid region slice is available" false "refused"
+    | Some middle ->
+        equal "region copy preserves the declared slice" (Some [| 2uy; 3uy |]) (Region.tryToArray middle)
+        equal "absolute address preserves the slice origin" 2 (Region.absolute middle 1)
+        equal "absolute address rejects position beyond slice" -1 (Region.absolute middle 3)
+    let empty = Region.ofArray [||]
+    equal "valid empty region is distinguished from invalid data" (Some [||]) (Region.tryToArray empty)
+    let arrayView = { Region = Region.ofArray [| 1uy; 2uy |]; Layout = Layout.create 2 1 [| Field.array "values" 0 Repr.U8 2 AccessKind.ReadWrite |] }
+    equal "valid inline array retains scalar first-element access" (Some 1uy) (View.readU8 arrayView "values")

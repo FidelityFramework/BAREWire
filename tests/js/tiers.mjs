@@ -29,6 +29,8 @@ const Desc = await load("Hardware/Descriptors.js");
 const Abi = await load("Hardware/Abi.js");
 const V = await load("Hardware/Validator.js");
 const Btf = await load("Hardware/Btf.js");
+const Region = await load("Memory/Region.js");
+const View = await load("Memory/View.js");
 const P = await load("Platform/Description.js");
 const Check = await load("Platform/Check.js");
 const Obl = await load("Platform/Obligations.js");
@@ -84,6 +86,36 @@ expect("btf parses", image.Ok, true);
 const st = Btf.Btf_tryStruct(image, "sockaddr_in");
 expect("btf struct size", st ? st.SizeOrType : -1, 16);
 expect("btf sin_addr bit offset", st ? st.MemberBitOffsets[2] : -1, 32);
+
+// ---- Memory: the declaration restricts accesses, even over a larger buffer ----
+for (const [access, canRead, canWrite] of [["ro", true, false], ["wo", false, true], ["rw", true, true], ["unknown", false, false]]) {
+  const bytes = new Uint8Array(8);
+  const field = Desc.Field_simple("value", 0, "u8", access);
+  const view = {Region: Region.RegionModule_ofArray(bytes), Layout: Desc.Layout_create(1, 1, [field])};
+  expect(`view read ${access}`, View.ViewModule_readU8(view, "value") !== undefined, canRead);
+  expect(`view write ${access}`, View.ViewModule_writeU8(view, "value", 42), canWrite);
+  expect(`view write ${access} preserves refused bytes`, bytes[0], canWrite ? 42 : 0);
+}
+for (const [offset, count, size] of [[1, 1, 1], [0, 0, 1], [0, -1, 1], [0, 3, 2], [0, 2147483647, 1]]) {
+  const bytes = new Uint8Array(8);
+  const view = {Region: Region.RegionModule_ofArray(bytes), Layout: Desc.Layout_create(size, 1, [Desc.Field_array("value", offset, "u8", count, "rw")])};
+  expect("view refuses field outside its declared extent", View.ViewModule_readU8(view, "value"), undefined);
+  expect("view refuses write through invalid field", View.ViewModule_writeU8(view, "value", 42), false);
+  expect("invalid field write changes no bytes", bytes.every(b => b === 0), true);
+}
+for (const [offset, length] of [[-1, 4], [1, 8], [0, -2147483648], [2147483647, 4]]) {
+  const invalid = {Data: new Uint8Array(8), Offset: offset, Length: length};
+  expect("invalid region cannot form view", View.ViewModule_create(invalid, Desc.Layout_create(0, 1, [])), undefined);
+  expect("invalid region contains no valid access", Region.RegionModule_contains(invalid, 1, 1), false);
+  expect("invalid region cannot be sliced", Region.RegionModule_slice(invalid, 1, 1), undefined);
+  expect("invalid region has no absolute position", Region.RegionModule_absolute(invalid, 1), -1);
+  expect("invalid region cannot become an empty payload", Region.RegionModule_tryToArray(invalid), undefined);
+}
+const emptyCopy = Region.RegionModule_tryToArray(Region.RegionModule_ofArray(new Uint8Array(0)));
+expect("valid empty region has a valid empty copy", emptyCopy?.length, 0);
+const middle = Region.RegionModule_slice(Region.RegionModule_ofArray(new Uint8Array([1, 2, 3, 4])), 1, 2);
+expect("region copy preserves slice", Array.from(Region.RegionModule_tryToArray(middle)).join(","), "2,3");
+expect("region absolute position preserves origin", Region.RegionModule_absolute(middle, 1), 2);
 
 // ---- Platform: the Linux description, checked, its obligations dispatched ----
 const readContract = P.ContractModule_assumed("read-bound", "writes at most count bytes into buf; returns n <= count; n = 0 is end of input", ["CWE-120"]);

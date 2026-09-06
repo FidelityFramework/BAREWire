@@ -94,6 +94,11 @@ the upper bound. Malformed text is a finding, not an unbounded or rounded range.
 Contract manifests include `floor` and `atmost` whenever a return bound is declared,
 so changing a fact read by saturation changes the observer's output too.
 
+Memory views enforce the field's declared access rights and inline extent, even
+when the backing region is larger. Region operations reject invalid backing spans;
+`Region.tryToArray` replaces `Region.toArray`, returning `None` for invalid metadata
+and `Some [||]` for a valid empty region. Refused view writes leave bytes unchanged.
+
 The permanent .NET and JavaScript regressions exercise these boundaries. The JavaScript
 proof gate fails if cvc5 cannot be dispatched; a skipped solver is not proof evidence.
 These hosted gates do not replace the native RoundTrip acceptance gate below.
