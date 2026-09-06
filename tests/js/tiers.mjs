@@ -115,15 +115,41 @@ const ids = obs.map(o => o.Id);
 expect("has input_copy_bound", ids.includes("input_copy_bound_consolereadln"), true);
 expect("has spaces_disjoint", ids.includes("spaces_disjoint"), true);
 let dispatched = 0;
-for (const o of obs) {
+const solve = (o, expected) => {
   const path = resolve(tmpdir(), `barewire-js-${o.Id}.smt2`);
   writeFileSync(path, Obl.Obligations_smtLib(o).replace("(reset)", ""));
   const r = spawnSync("cvc5", [path], { encoding: "utf8" });
-  if (r.error) { failures++; console.error(`FAIL cvc5 ${o.Id}: ${r.error.message}`); break; }
+  if (r.error) { failures++; console.error(`FAIL cvc5 ${o.Id}: ${r.error.message}`); return; }
   expect(`cvc5 exit ${o.Id}`, r.status, 0);
-  expect(`cvc5 ${o.Id}`, r.stdout.trim(), "unsat");
+  expect(`cvc5 ${o.Id}`, r.stdout.trim(), expected);
   dispatched++;
+};
+for (const o of obs) solve(o, "unsat");
+const mapping = (first, a, ac, second, b, bc) => ({...desc, Buffers: [], Surfaces: [], Transports: [], Spaces: [
+  P.MemorySpaceModule_withBase(P.MemorySpaceModule_create(first, "rodata", ac, 1), a),
+  P.MemorySpaceModule_withBase(P.MemorySpaceModule_create(second, "rodata", bc, 1), b)]});
+const disjointness = d => Obl.Obligations_ofDescription(d).find(o => o.Kind === "memory-map-disjointness");
+for (const [a, ac, b, bc, intersects] of [
+  [9223372036854775803n, 16n, 9223372036854775799n, 16n, true],
+  [-9223372036854775808n, 8n, -9223372036854775804n, 8n, true],
+  [-9223372036854775808n, 8n, -9223372036854775800n, 8n, false],
+  [-9223372036854775808n, 9223372036854775807n, 0n, 1n, false],
+  [-4n, 8n, 0n, 8n, true], [-4n, 4n, 0n, 8n, false]]) {
+  for (const swapped of [false, true]) {
+    const d = swapped ? mapping("first", b, bc, "second", a, ac) : mapping("first", a, ac, "second", b, bc);
+    expect(`memory overlap ${a}/${b} swapped=${swapped}`, Check.Check_run(d).some(f => f.Kind === "overlapping-spaces"), intersects);
+    solve(disjointness(d), intersects ? "sat" : "unsat");
+  }
 }
+for (const [b, intersects] of [[4n, true], [16n, false]]) {
+  const d = mapping("alpha-beta", 0n, 8n, "Alpha Beta", b, 8n);
+  solve(disjointness(d), intersects ? "sat" : "unsat");
+}
+const triples = {...desc, Buffers: ["console-readln", "Console Readln", "console_readln_2"].map(name => P["BufferSchemaModule_fixed$0027"](name, "str", 8n, "arena"))};
+const tripleIds = Obl.Obligations_ofDescription(triples).map(o => o.Id);
+expect("generated obligation ids cannot collide with declarations", new Set(tripleIds).size, tripleIds.length);
+solve({Id: "minimum_bound", Kind: "buffer-capacity", Logic: "QF_LIA", Statement: "minimum signed integer is below zero", Source: "audit", Refs: [],
+  Form: {Kind: "leq", A: -9223372036854775808n, B: 0n, Names: [], Values: []}}, "unsat");
 console.log(`dispatched ${dispatched} obligations to cvc5 from the JavaScript build`);
 console.log(failures === 0 ? "javascript tiers differential: agrees" : `javascript tiers differential: ${failures} mismatches`);
 process.exit(failures === 0 ? 0 : 1);

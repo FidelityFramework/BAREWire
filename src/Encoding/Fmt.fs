@@ -26,9 +26,18 @@ module Fmt =
     let ofUInt64 (v: uint64) : string =
         digitsOf v false
 
+    // -(v + 1) is representable even for the least signed value; the final
+    // unit is added in the unsigned magnitude domain. Never negate MinValue.
+    let private magnitude (v: int64) : uint64 =
+        if v < 0L then uint64 (0L - (v + 1L)) + 1UL else uint64 v
+
+    /// Absolute decimal text, including the magnitude of the least signed value.
+    let magnitudeText (v: int64) : string =
+        digitsOf (magnitude v) false
+
     /// Decimal text of a signed 64-bit value.
     let ofInt64 (v: int64) : string =
-        if v < 0L then digitsOf (uint64 (0L - v)) true else digitsOf (uint64 v) false
+        digitsOf (magnitude v) (v < 0L)
 
     /// Decimal text of a platform-width int.
     let ofInt (v: int) : string =

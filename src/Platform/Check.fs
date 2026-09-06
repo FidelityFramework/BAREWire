@@ -216,7 +216,14 @@ module Check =
             match b.Base with
             | Some _ -> true
             | None -> false
-        aHas && bHas && ab < bb + b.Capacity && bb < ab + a.Capacity
+        // Compare the later start with the earlier extent without overflowing
+        // either an endpoint or the distance across zero. The SMT observer uses
+        // mathematical integers; this observer must decide the same proposition.
+        let startsWithin (start: int64) (capacity: int64) (later: int64) : bool =
+            if start < 0L && later >= 0L then later < start + capacity
+            else later - start < capacity
+        aHas && bHas && a.Capacity > 0L && b.Capacity > 0L
+        && (if ab <= bb then startsWithin ab a.Capacity bb else startsWithin bb b.Capacity ab)
 
     let private checkOverlaps (acc: Finding array) (spaces: MemorySpace array) : Finding array =
         let n = Array.length spaces

@@ -174,6 +174,45 @@ let run () =
     let badRange = { kernel with Surfaces = [| BoundarySurface.create "h" SurfaceKind.HostApi [| Endpoint.withAvailability (Endpoint.create "x" EndpointKind.Symbol "x" [||]) "6.0" "5.8" |] |] }
     check "inverted availability is a finding" (Check.run badRange |> Array.exists (fun f -> f.Kind = FindingKind.InvalidAvailability)) (Check.explain (Check.run badRange))
 
+    // Check and the independent QF_LIA observer must agree even when an
+    // endpoint cannot be materialized in a signed host integer.
+    let mapping firstName a ac secondName b bc =
+        { linux with
+            Spaces = [| MemorySpace.withBase (MemorySpace.create firstName MemoryKind.Rodata ac 1) a
+                        MemorySpace.withBase (MemorySpace.create secondName MemoryKind.Rodata bc 1) b |]
+            Buffers = [||]; Surfaces = [||]; Transports = [||] }
+    let disjointness description =
+        Obligations.ofDescription description |> Array.find (fun o -> o.Kind = ObligationKind.MemoryMapDisjointness)
+    let edgeCases = [
+        System.Int64.MaxValue - 4L, 16L, System.Int64.MaxValue - 8L, 16L, true
+        System.Int64.MinValue, 8L, System.Int64.MinValue + 4L, 8L, true
+        System.Int64.MinValue, 8L, System.Int64.MinValue + 8L, 8L, false
+        System.Int64.MinValue, System.Int64.MaxValue, 0L, 1L, false
+        -4L, 8L, 0L, 8L, true
+        -4L, 4L, 0L, 8L, false
+    ]
+    for a, ac, b, bc, intersects in edgeCases do
+        for swapped in [ false; true ] do
+            let description = if swapped then mapping "first" b bc "second" a ac else mapping "first" a ac "second" b bc
+            let findings = Check.run description
+            equal (sprintf "memory overlap check at %d/%d swapped=%b" a b swapped) intersects
+                (findings |> Array.exists (fun f -> f.Kind = FindingKind.OverlappingSpaces))
+            equal (sprintf "memory overlap proof at %d/%d swapped=%b" a b swapped)
+                (if intersects then "sat" else "unsat") (cvc5 (disjointness description))
+    for b, intersects in [ 4L, true; 16L, false ] do
+        let description = mapping "alpha-beta" 0L 8L "Alpha Beta" b 8L
+        equal "distinct space names may have the same slug" intersects
+            (Check.run description |> Array.exists (fun f -> f.Kind = FindingKind.OverlappingSpaces))
+        equal "SMT identifiers distinguish colliding space slugs" (if intersects then "sat" else "unsat") (cvc5 (disjointness description))
+    let triplets = { linux with Buffers = [| BufferSchema.fixed' "console-readln" "str" 8L "arena"; BufferSchema.fixed' "Console Readln" "str" 8L "arena"; BufferSchema.fixed' "console_readln_2" "str" 8L "arena" |] }
+    let tripletIds = Obligations.ofDescription triplets |> Array.map (fun o -> o.Id)
+    equal "generated obligation suffix cannot collide with a declared name" tripletIds.Length (Array.distinct tripletIds).Length
+    let minimum : Obligation =
+        { Id = "minimum_bound"; Kind = ObligationKind.BufferCapacity; Logic = Logic.QfLia
+          Statement = "the least signed integer is below zero"; Source = "audit"; Refs = [||]
+          Form = { Kind = FormKind.Leq; A = System.Int64.MinValue; B = 0L; Names = [||]; Values = [||] } }
+    equal "SMT preserves the minimum signed integer" "unsat" (cvc5 minimum)
+
     // ---- ThreeBody: the close-encounter frame over Layer 2 ----
     let abi = Abi.sysvAmd64
     let named (n: string) (r: Repr) : NamedRepr = { Name = n; Repr = r; Count = 1 }

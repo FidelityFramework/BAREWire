@@ -72,6 +72,10 @@ module ObligationKind =
 /// as a constant in witness code. `ofDescription` is total and deterministic;
 /// `smtLib` renders the refutation form HelloProof checks (`unsat` means the
 /// obligation holds); `ledgerLine` is the one-line record for the ledger.
+/// This observer and its external ledger are verification scaffolding for the
+/// proof-carrying PSG's joint constraint mechanism, not its canonical proof
+/// state. Retain the scaffold until cross-layer agreement demonstrates that
+/// the graph carries these obligations and their evidence without loss.
 module Obligations =
 
     let private push (acc: Obligation array) (o: Obligation) : Obligation array =
@@ -262,16 +266,25 @@ module Obligations =
     let private dedupeIds (obs: Obligation array) : Obligation array =
         let n = Array.length obs
         let out : Obligation array = Array.zeroCreate n
+        let used (items: Obligation array) (upto: int) (id: string) : bool =
+            let mutable j = 0
+            let mutable found = false
+            while j < upto && not found do
+                found <- (Array.get items j).Id = id
+                j <- j + 1
+            found
         let mutable i = 0
         while i < n do
             let o = Array.get obs i
-            let mutable seen = 0
-            let mutable j = 0
-            while j < i do
-                if (Array.get obs j).Id = o.Id then
-                    seen <- seen + 1
-                j <- j + 1
-            let id = if seen = 0 then o.Id else Text.append (Text.append o.Id "_") (Fmt.ofInt (seen + 1))
+            let mutable id = o.Id
+            if used out i id then
+                let mutable suffix = 2
+                id <- Text.append (Text.append o.Id "_") (Fmt.ofInt suffix)
+                // Reserve original names too: a generated x_2 must not take
+                // the id belonging to a declaration encountered later.
+                while used out i id || used obs n id do
+                    suffix <- suffix + 1
+                    id <- Text.append (Text.append o.Id "_") (Fmt.ofInt suffix)
             Array.set out i { o with Id = id }
             i <- i + 1
         out
@@ -318,7 +331,7 @@ module Obligations =
 
     /// An SMT-LIB integer numeral; negatives are written `(- n)`.
     let private smtInt (v: int64) : string =
-        if v < 0L then Text.append (Text.append "(- " (Fmt.ofInt64 (0L - v))) ")" else Fmt.ofInt64 v
+        if v < 0L then Text.append (Text.append "(- " (Fmt.magnitudeText v)) ")" else Fmt.ofInt64 v
 
     /// A 64-bit SMT-LIB vector literal, `#x` and sixteen hex digits.
     let private hex16 (v: uint64) : string =
@@ -343,14 +356,16 @@ module Obligations =
         Text.append (Text.append "(assert " term) ")"
 
     /// The disjointness term for ranges i and j: one ends before the other begins.
-    let private disjointPair (names: string array) (values: int64 array) (i: int) (j: int) : string =
-        let bi = Text.append "b_" (slug (Array.get names i))
-        let bj = Text.append "b_" (slug (Array.get names j))
+    let private disjointPair (values: int64 array) (i: int) (j: int) : string =
+        // Names remain in Form.Names in declaration order. Solver symbols use
+        // that ordinal, so distinct declarations never alias through slugging.
+        let bi = Text.append "b_" (Fmt.ofInt i)
+        let bj = Text.append "b_" (Fmt.ofInt j)
         let li = smtInt (Array.get values (2 * i + 1))
         let lj = smtInt (Array.get values (2 * j + 1))
         paren2 "or" (paren2 "<=" (paren2 "+" bi li) bj) (paren2 "<=" (paren2 "+" bj lj) bi)
 
-    /// The refutation-form SMT-LIB text of one obligation: the definition is
+    /// The scaffold's SMT-LIB serialization of one obligation: the definition is
     /// asserted equal to a Boolean named by the id, its negation is asserted,
     /// and `unsat` means the obligation holds. Integer forms are stated in
     /// QF_LIA; `PowerOfTwo` in QF_BV over 64-bit vectors.
@@ -383,7 +398,7 @@ module Obligations =
                 let mutable d = h4
                 let mutable i = 0
                 while i < n do
-                    let name = Text.append "b_" (slug (Array.get f.Names i))
+                    let name = Text.append "b_" (Fmt.ofInt i)
                     d <- line d (Text.append (Text.append "(declare-const " name) " Int)")
                     d <- line d (assert' (paren2 "=" name (smtInt (Array.get f.Values (2 * i)))))
                     i <- i + 1
@@ -394,7 +409,7 @@ module Obligations =
                 while a < n do
                     let mutable b = a + 1
                     while b < n do
-                        Array.set pairs p (disjointPair f.Names f.Values a b)
+                        Array.set pairs p (disjointPair f.Values a b)
                         p <- p + 1
                         b <- b + 1
                     a <- a + 1
