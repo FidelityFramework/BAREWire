@@ -40,7 +40,7 @@ Everything above compiles under all three compilers from one source. The rules t
 | --- | --- |
 | .NET | `dotnet run --project tests/BAREWire.Tests.fsproj` (golden-frame vectors, envelope, validator, observers) |
 | JavaScript | `fable src/BAREWire.Fable.fsproj --outDir out && echo '{"type":"module"}' > out/package.json && node tests/js/roundtrip.mjs out && node tests/js/tiers.mjs out` |
-| Native | `Composer compile samples/RoundTrip/RoundTrip.fidproj && samples/RoundTrip/targets/roundtrip` |
+| Native | `python3 tests/native_gate.py /path/to/Composer` (compile, require successful execution, compare exact transcript) |
 
 The three transcripts agree on the same values; that agreement is the cross-substrate byte-identity claim made testable ([Readiness Audit](docs/Readiness%20Audit.md) §4 step 4).
 

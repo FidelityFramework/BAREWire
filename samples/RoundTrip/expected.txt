@@ -18,6 +18,17 @@ hellobuild=abc123
 sockaddrsize=16
 sockaddragrees=1
 pointerfree=1
+memorywrite=1
+memoryread=42
+readonlywrite=0
+readonlybyte=0
+outsidewrite=0
+outsidebyte=0
+schemafindings=0
+wiremin=5
+wiremax=5
+wirefixed=1
+unresolvedschema=1
 findings=0
 obligations=4
 obligation capacity_positive_consolereadln kind=buffer-capacity logic=QF_LIA source=cpu-linux-x86_64:consoleReadln refs=CWE-131,CWE-120 : buffer consoleReadln declares a positive capacity (1024 > 0)

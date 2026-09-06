@@ -79,6 +79,30 @@ The Encoding tier needs two things the substrates provide differently: UTF-8 tex
 
 ## 5. The gates
 
+**2026-09-06 integrity recheck:** the current library passes 446 .NET checks and
+its JavaScript codec and extended-tier gates, including 22 actual cvc5 dispatches
+with both expected `sat` and expected `unsat` answers. These are hosted results.
+The native RoundTrip recheck against isolated Composer `cf6d3aa` and clef `ad17be2d8`
+failed: an option payload retained unresolved pattern metadata, and lowering's
+operand width disagreed with the graph's selected width. Applying `fidelity`'s
+existing metadata substitution fix in the isolated compiler closed that failure;
+the next failure was an unresolved `None` payload assigned to a mutable optional
+endpoint in `Hardware/Validator.fs`. Neither run produced an accepted native binary.
+The historical native successes below establish those snapshots only.
+
+RoundTrip now also exercises Memory access rights and declared extents, and Schema
+wire sizes and an unresolved reference. `python3 tests/native_gate.py /path/to/Composer`
+compiles a fresh artifact, requires zero exit status from compilation and execution,
+and compares exact stdout bytes with `expected.txt`. The oracle is never generated
+by either test gate. `python3 tests/native_gate_tests.py` checks rejection of compiler
+failure, a nonzero program exit despite matching output, stale or missing artifacts,
+a missing oracle, a differing transcript, and a nonterminating program.
+
+These gates check cross-layer agreement. The external obligation serialization and
+ledger remain verification scaffolding for the proof-carrying PSG's joint constraint
+mechanism; hosted agreement does not establish that the PSG carries and preserves
+all of these facts through native lowering.
+
 Layout derivation returns `Result<StructDescriptor, LayoutFinding array>`. A consumer
 must handle `Error` before using offsets for a memory view, BTF, or proof. Validation
 reports `extent-overflow` when exact byte arithmetic cannot be represented by the

@@ -78,6 +78,35 @@ let main argv =
         show "sockaddragrees" (if verdict.Agrees then 1 else 0)
         show "pointerfree" (if Layout.isPointerFree sockaddr.Layout then 1 else 0)
 
+    // ---- Memory: permitted writes and refusal without byte mutation ----
+    let memory = Array.zeroCreate<byte> 8
+    let region = BAREWire.Memory.Region.ofArray memory
+    let layout = Layout.create 2 1 [|
+        Field.simple "value" 0 Repr.U8 AccessKind.ReadWrite
+        Field.simple "status" 1 Repr.U8 AccessKind.ReadOnly |]
+    let view : BAREWire.Memory.View = { Region = region; Layout = layout }
+    show "memorywrite" (if BAREWire.Memory.View.writeU8 view "value" (byte 42) then 1 else 0)
+    show "memoryread" (match BAREWire.Memory.View.readU8 view "value" with Some value -> int value | None -> -1)
+    show "readonlywrite" (if BAREWire.Memory.View.writeU8 view "status" (byte 99) then 1 else 0)
+    show "readonlybyte" (int (Array.get memory 1))
+    let outside : BAREWire.Memory.View =
+        { Region = region; Layout = Layout.create 1 1 [| Field.simple "value" 1 Repr.U8 AccessKind.ReadWrite |] }
+    show "outsidewrite" (if BAREWire.Memory.View.writeU8 outside "value" (byte 99) then 1 else 0)
+    show "outsidebyte" (int (Array.get memory 1))
+
+    // ---- Schema: packed wire extents and unresolved contract references ----
+    let header = BAREWire.Schema.SchemaDSL.struct' [|
+        BAREWire.Schema.SchemaDSL.field "tag" BAREWire.Schema.SchemaDSL.u8
+        BAREWire.Schema.SchemaDSL.field "value" BAREWire.Schema.SchemaDSL.u32 |]
+    let schema = BAREWire.Schema.SchemaDSL.withType "Header" header (BAREWire.Schema.SchemaDSL.schema "Header")
+    show "schemafindings" (Array.length (BAREWire.Schema.Validation.validate schema))
+    let wireSize = BAREWire.Schema.Analysis.wireSize schema header
+    show "wiremin" wireSize.Min
+    show "wiremax" wireSize.Max
+    show "wirefixed" (if wireSize.IsFixed then 1 else 0)
+    let unresolved = BAREWire.Schema.SchemaDSL.schema "Missing"
+    show "unresolvedschema" (Array.length (BAREWire.Schema.Validation.validate unresolved))
+
     // ---- Platform: a description, checked, and its obligations ----
     let readContract = Contract.assumed "read-bound" "writes at most count bytes into buf; returns n <= count; n = 0 is end of input" [| "CWE-120" |]
     let spaces = [|

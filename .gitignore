@@ -62,3 +62,6 @@ src/.idea/.idea.src.dir/.idea/vcs.xml
 
 # Composer sample build output (samples/RoundTrip/targets); HelloProof commits its targets deliberately, this repository does not
 samples/**/targets/
+
+# Python native-gate harness
+__pycache__/
