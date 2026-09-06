@@ -90,113 +90,118 @@ module Analysis =
         Array.set out n name
         out
 
-    /// The size of a type. `path` holds the declaration names being
-    /// resolved; a reference back into it is a legal recursion through an
-    /// indirection, whose size has no bound.
-    let rec private sizeOf (schema: SchemaDefinition) (path: string array) (t: SchemaType) : Size =
+    /// Narrow an exact hosted extent only when its value is preserved. This
+    /// descriptor limit is not a source-level Clef numeric width.
+    let private extent (value: int64) : int option =
+        let narrowed = int value
+        if value >= 0L && int64 narrowed = value then Some narrowed else None
+
+    let private failure (kind: string) (location: string) : ValidationError array =
+        [| { Kind = kind; Location = location } |]
+
+    let private sized (location: string) (lo: int64) (hi: int64) (bounded: bool) (isFixed: bool) : Result<Size, ValidationError array> =
+        let upper = if bounded then extent hi else Some 0
+        match extent lo, upper with
+        | Some minimum, Some maximum ->
+            Ok { Min = minimum; Max = maximum; IsBounded = bounded; IsFixed = isFixed }
+        | _ -> Error (failure "extent-overflow" location)
+
+    /// Size a validated type. No invalid or unresolved fact is a zero-sized
+    /// or unbounded type; those are meaningful claims about valid encodings.
+    let rec private sizeOf (schema: SchemaDefinition) (path: string array) (location: string) (t: SchemaType) : Result<Size, ValidationError array> =
         match t with
-        | Prim k -> primSize k
-        | FixedData n ->
-            let width = if n < 0 then 0 else n
-            fixedWidth width
-        | Enum spec ->
-            // BARE encodes every enum value as `uint` (ULEB128) whatever the
-            // declared base; the base bounds the values, not the encoding.
-            primSize PrimKind.UInt
+        | Prim k -> Ok (primSize k)
+        | FixedData n -> Ok (fixedWidth n)
+        | Enum _ -> Ok (primSize PrimKind.UInt)
         | Optional inner ->
-            let s = sizeOf schema path inner
-            { Min = 1; Max = 1 + s.Max; IsBounded = s.IsBounded; IsFixed = false }
-        | List _ -> unbounded 1
+            match sizeOf schema path location inner with
+            | Error errors -> Error errors
+            | Ok s -> sized location 1L (1L + int64 s.Max) s.IsBounded false
+        | List _ | Map _ -> Ok (unbounded 1)
         | FixedList spec ->
-            let s = sizeOf schema path spec.Element
-            let n = if spec.Length < 0 then 0 else spec.Length
-            { Min = s.Min * n; Max = s.Max * n; IsBounded = s.IsBounded; IsFixed = s.IsFixed }
-        | Map _ -> unbounded 1
-        | Union cases -> unionSize schema path cases
-        | Struct fields -> structSize schema path fields
-        | TypeRef name -> refSize schema path name
+            match sizeOf schema path location spec.Element with
+            | Error errors -> Error errors
+            | Ok s -> sized location (int64 s.Min * int64 spec.Length) (int64 s.Max * int64 spec.Length) s.IsBounded s.IsFixed
+        | Union cases -> unionSize schema path location cases
+        | Struct fields -> structSize schema path location fields
+        | TypeRef name ->
+            match Schema.tryFindType name schema with
+            | None -> Error (failure ValidationErrorKind.UndefinedType location)
+            | Some target ->
+                if onPath name path then Error (failure ValidationErrorKind.CyclicTypeReference location)
+                else sizeOf schema (pushName path name) name target
 
-    /// A union is its tag (the ULEB128 width of each case's tag, which is a
-    /// known constant) plus the case: the smallest case for `Min`, the
-    /// largest for `Max`. Fixed only when it has one case and that case is
-    /// fixed.
-    and private unionSize (schema: SchemaDefinition) (path: string array) (cases: UnionCase array) : Size =
-        let n = Array.length cases
-        let mutable lo = 0
-        let mutable hi = 0
-        let mutable bounded = true
+    and private unionSize (schema: SchemaDefinition) (path: string array) (location: string) (cases: UnionCase array) : Result<Size, ValidationError array> =
+        let mutable result = Ok (fixedWidth 0)
         let mutable i = 0
-        while i < n do
+        while i < Array.length cases do
             let c = Array.get cases i
-            let tag = if c.Tag < 0 then 0 else c.Tag
-            let tagSize = varintSize (uint64 tag)
-            let s = sizeOf schema path c.Type
-            let cLo = tagSize + s.Min
-            let cHi = tagSize + s.Max
-            lo <- (if i = 0 || cLo < lo then cLo else lo)
-            hi <- (if cHi > hi then cHi else hi)
-            bounded <- bounded && s.IsBounded
+            match result, sizeOf schema path location c.Type with
+            | Error errors, _ | _, Error errors -> result <- Error errors
+            | Ok total, Ok s ->
+                let tagSize = int64 (varintSize (uint64 c.Tag))
+                match sized location (tagSize + int64 s.Min) (tagSize + int64 s.Max) s.IsBounded s.IsFixed with
+                | Error errors -> result <- Error errors
+                | Ok caseSize ->
+                    let lo = if i = 0 || caseSize.Min < total.Min then caseSize.Min else total.Min
+                    let hi = if caseSize.Max > total.Max then caseSize.Max else total.Max
+                    let bounded = total.IsBounded && caseSize.IsBounded
+                    result <- Ok { Min = lo; Max = (if bounded then hi else 0); IsBounded = bounded; IsFixed = bounded && lo = hi }
             i <- i + 1
-        { Min = lo; Max = (if bounded then hi else 0); IsBounded = bounded; IsFixed = bounded && lo = hi }
+        result
 
-    /// A struct is the sum of its fields, packed with no padding.
-    and private structSize (schema: SchemaDefinition) (path: string array) (fields: StructField array) : Size =
-        let n = Array.length fields
-        let mutable lo = 0
-        let mutable hi = 0
-        let mutable bounded = true
-        let mutable isFixed = true
+    and private structSize (schema: SchemaDefinition) (path: string array) (location: string) (fields: StructField array) : Result<Size, ValidationError array> =
+        let mutable result = Ok (fixedWidth 0)
         let mutable i = 0
-        while i < n do
+        while i < Array.length fields do
             let f = Array.get fields i
-            let s = sizeOf schema path f.Type
-            lo <- lo + s.Min
-            hi <- hi + s.Max
-            bounded <- bounded && s.IsBounded
-            isFixed <- isFixed && s.IsFixed
+            let fieldLocation = Text.append (Text.append location ".") f.Name
+            match result, sizeOf schema path fieldLocation f.Type with
+            | Error errors, _ | _, Error errors -> result <- Error errors
+            | Ok total, Ok s ->
+                result <- sized fieldLocation (int64 total.Min + int64 s.Min) (int64 total.Max + int64 s.Max)
+                              (total.IsBounded && s.IsBounded) (total.IsFixed && s.IsFixed)
             i <- i + 1
-        { Min = lo; Max = (if bounded then hi else 0); IsBounded = bounded; IsFixed = isFixed }
+        result
 
-    and private refSize (schema: SchemaDefinition) (path: string array) (name: string) : Size =
-        let target = Schema.tryFindType name schema
-        match target with
-        | None -> unbounded 0
-        | Some tt -> (if onPath name path then unbounded 0 else sizeOf schema (pushName path name) tt)
+    /// The exact size bounds of a well-formed type, or findings. Dynamic size
+    /// is a successful unbounded range; invalid schemas and lost arithmetic
+    /// are errors that cannot supply allocation or proof premises.
+    let wireSize (schema: SchemaDefinition) (t: SchemaType) : Result<Size, ValidationError array> =
+        let errors = Validation.validateType schema t
+        if Array.length errors > 0 then Error errors
+        else sizeOf schema (Array.zeroCreate 0) schema.Root t
 
-    /// The encoded size of a type within a schema. An undefined reference
-    /// is unbounded; validate first for a meaningful answer.
-    let wireSize (schema: SchemaDefinition) (t: SchemaType) : Size =
-        sizeOf schema (Array.zeroCreate 0) t
+    /// Fixed-width status is available only after successful analysis.
+    let isFixedWidth (schema: SchemaDefinition) (t: SchemaType) : Result<bool, ValidationError array> =
+        match wireSize schema t with
+        | Error errors -> Error errors
+        | Ok size -> Ok size.IsFixed
 
-    /// True when every value of the type encodes to the same width.
-    let isFixedWidth (schema: SchemaDefinition) (t: SchemaType) : bool =
-        (wireSize schema t).IsFixed
-
-    /// The byte offset and width of each field of a struct whose fields are
-    /// all fixed width. BARE structs are packed: no alignment padding, each
-    /// field starts where the previous one ends. Empty when any field is not
-    /// fixed width, since no static offsets exist past it.
-    let packedOffsets (schema: SchemaDefinition) (fields: StructField array) : FieldExtent array =
-        let n = Array.length fields
-        let mutable allFixed = true
-        let mutable i = 0
-        while i < n do
-            let f = Array.get fields i
-            allFixed <- allFixed && isFixedWidth schema f.Type
-            i <- i + 1
-        let count = if allFixed then n else 0
-        let out : FieldExtent array = Array.zeroCreate count
-        let mutable offset = 0
-        let mutable j = 0
-        while j < count do
-            let f = Array.get fields j
-            let s = wireSize schema f.Type
-            // SUBSET(record-inference): preferred spelling is the unqualified record literal in place.
-            let extent : FieldExtent = { FieldExtent.Name = f.Name; FieldExtent.Offset = offset; FieldExtent.Size = s.Min }
-            Array.set out j extent
-            offset <- offset + s.Min
-            j <- j + 1
-        out
+    /// Static packed offsets when all fields have fixed sizes. Ok None means
+    /// valid data-dependent offsets; Error means an invalid or unrepresentable
+    /// extent. Neither case supplies a plausible empty layout.
+    let packedOffsets (schema: SchemaDefinition) (fields: StructField array) : Result<FieldExtent array option, ValidationError array> =
+        match wireSize schema (Struct fields) with
+        | Error errors -> Error errors
+        | Ok size when not size.IsFixed -> Ok None
+        | Ok _ ->
+            let out : FieldExtent array = Array.zeroCreate (Array.length fields)
+            let mutable offset = 0
+            let mutable errors : ValidationError array = Array.zeroCreate 0
+            let mutable i = 0
+            while i < Array.length fields && Array.length errors = 0 do
+                let f = Array.get fields i
+                match sizeOf schema (Array.zeroCreate 0) f.Name f.Type with
+                | Error found -> errors <- found
+                | Ok s ->
+                    match extent (int64 offset + int64 s.Min) with
+                    | None -> errors <- failure "extent-overflow" f.Name
+                    | Some endpoint ->
+                        Array.set out i { Name = f.Name; Offset = offset; Size = s.Min }
+                        offset <- endpoint
+                i <- i + 1
+            if Array.length errors > 0 then Error errors else Ok (Some out)
 
     /// The name a reference carries, or "" for any other type.
     let private refName (t: SchemaType) : string =

@@ -79,7 +79,7 @@ The Encoding tier needs two things the substrates provide differently: UTF-8 tex
 
 ## 5. The gates
 
-**2026-09-06 integrity recheck:** the current library passes 446 .NET checks and
+**2026-09-06 integrity recheck:** the current library passes 476 .NET checks and
 its JavaScript codec and extended-tier gates, including 22 actual cvc5 dispatches
 with both expected `sat` and expected `unsat` answers. These are hosted results.
 The native RoundTrip recheck against isolated Composer `cf6d3aa` and clef `ad17be2d8`
@@ -110,6 +110,20 @@ hosted descriptor; its `ExpectedSize` is then `None`, never a wrapped size. `Abi
 and `Abi.tryFieldSize` likewise return an option. This implementation limit does not
 define a Clef source-level numeric width. The RoundTrip sample handles derivation
 failure explicitly and exits unsuccessfully.
+
+Schema extent analysis follows the same rule: `Analysis.wireSize` and
+`Analysis.isFixedWidth` return a `Result` whose errors are located findings. The
+schema and the requested type expression are validated before sizing. A missing
+reference, recursive schema, invalid length, or unknown primitive cannot become
+an unbounded or zero-sized value. Fixed-list products, optional/union tags, and
+struct sums report `extent-overflow` when the hosted extent cannot hold the exact
+answer. `Analysis.packedOffsets` returns `Ok (Some offsets)` for a fixed layout,
+`Ok None` for valid data-dependent offsets, and `Error findings` for invalid or
+unrepresentable premises. Consumers must distinguish these cases before allocating
+memory or constructing a proof obligation. Native and hosted RoundTrip handle
+wire-size failure explicitly. The native sample opens `BAREWire.Memory` for its
+view annotations; the audited newer compiler also rejected the equivalent fully
+qualified type name, a separate lookup gap.
 
 Representation bounds are checked as exact plain decimal text: an optional sign,
 digits, and an optional fractional part. Integer representations require integer

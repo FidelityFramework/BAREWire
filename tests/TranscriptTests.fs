@@ -4,6 +4,7 @@ open System.IO
 open BAREWire.Encoding
 open BAREWire.Framing
 open BAREWire.Hardware
+open BAREWire.Memory
 open BAREWire.Platform
 open BAREWire.Tests.Harness
 
@@ -66,12 +67,12 @@ let transcript () : string array =
     let layout = Layout.create 2 1 [|
         Field.simple "value" 0 Repr.U8 AccessKind.ReadWrite
         Field.simple "status" 1 Repr.U8 AccessKind.ReadOnly |]
-    let view : BAREWire.Memory.View = { Region = region; Layout = layout }
+    let view : View = { Region = region; Layout = layout }
     show "memorywrite" (if BAREWire.Memory.View.writeU8 view "value" (byte 42) then 1 else 0)
     show "memoryread" (match BAREWire.Memory.View.readU8 view "value" with Some value -> int value | None -> -1)
     show "readonlywrite" (if BAREWire.Memory.View.writeU8 view "status" (byte 99) then 1 else 0)
     show "readonlybyte" (int (Array.get memory 1))
-    let outside : BAREWire.Memory.View =
+    let outside : View =
         { Region = region; Layout = Layout.create 1 1 [| Field.simple "value" 1 Repr.U8 AccessKind.ReadWrite |] }
     show "outsidewrite" (if BAREWire.Memory.View.writeU8 outside "value" (byte 99) then 1 else 0)
     show "outsidebyte" (int (Array.get memory 1))
@@ -82,10 +83,12 @@ let transcript () : string array =
         BAREWire.Schema.SchemaDSL.field "value" BAREWire.Schema.SchemaDSL.u32 |]
     let schema = BAREWire.Schema.SchemaDSL.withType "Header" header (BAREWire.Schema.SchemaDSL.schema "Header")
     show "schemafindings" (Array.length (BAREWire.Schema.Validation.validate schema))
-    let wireSize = BAREWire.Schema.Analysis.wireSize schema header
-    show "wiremin" wireSize.Min
-    show "wiremax" wireSize.Max
-    show "wirefixed" (if wireSize.IsFixed then 1 else 0)
+    match BAREWire.Schema.Analysis.wireSize schema header with
+    | Error findings -> show "wiresizefindings" (Array.length findings)
+    | Ok wireSize ->
+        show "wiremin" wireSize.Min
+        show "wiremax" wireSize.Max
+        show "wirefixed" (if wireSize.IsFixed then 1 else 0)
     let unresolved = BAREWire.Schema.SchemaDSL.schema "Missing"
     show "unresolvedschema" (Array.length (BAREWire.Schema.Validation.validate unresolved))
 

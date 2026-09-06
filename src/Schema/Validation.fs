@@ -356,6 +356,11 @@ module Validation =
             i <- i + 1
         acc
 
+    /// Validate an expression in its complete schema context before it supplies
+    /// wire-size facts. References under dynamic containers still must resolve.
+    let validateType (schema: SchemaDefinition) (t: SchemaType) : ValidationError array =
+        walk schema schema.Root false t (validate schema)
+
     /// True when the schema has no defects.
     let isValid (schema: SchemaDefinition) : bool =
         Array.length (validate schema) = 0

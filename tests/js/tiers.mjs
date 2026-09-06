@@ -52,9 +52,30 @@ const text = Emit.schema(s);
 expect("schema text has struct", text.includes("type Message struct {"), true);
 expect("schema text optional", text.includes("type Attachment optional<data>"), true);
 const header = DSL["struct$0027"]([DSL.field("a", DSL.u8), DSL.field("b", DSL.u16), DSL.field("c", DSL.u32)]);
-const size = Ana.Analysis_wireSize(s, header);
+const sizeResult = Ana.Analysis_wireSize(s, header);
+expect("wire size analysis succeeds", sizeResult.tag, 0);
+if (sizeResult.tag !== 0) throw new Error("valid wire size failed");
+const size = sizeResult.fields[0];
 expect("fixed struct min", size.Min, 7);
 expect("fixed struct fixed", size.IsFixed, true);
+
+const rejectSize = (name, type, kind) => {
+  const result = Ana.Analysis_wireSize(s, type);
+  expect(name, result.tag, 1);
+  if (result.tag === 1) expect(`${name} finding`, result.fields[0].some(f => f.Kind === kind), true);
+};
+rejectSize("4 GiB wire list cannot wrap", DSL.fixedList(DSL.u64, 536870912), "extent-overflow");
+rejectSize("optional tag cannot wrap", DSL.optional(DSL.fixedData(2147483647)), "extent-overflow");
+rejectSize("negative wire length", DSL.fixedData(-1), "invalid-fixed-length");
+rejectSize("missing wire fact", DSL.typeRef("Missing"), "undefined-type");
+rejectSize("missing dynamic element fact", DSL.list(DSL.typeRef("Missing")), "undefined-type");
+const overflowingFields = [DSL.field("a", DSL.fixedData(2147483647)), DSL.field("b", DSL.u8), DSL.field("c", DSL.u8)];
+expect("packed wire offsets cannot wrap", Ana.Analysis_packedOffsets(s, overflowingFields).tag, 1);
+const variableOffsets = Ana.Analysis_packedOffsets(s, [DSL.field("value", DSL.string)]);
+expect("dynamic offsets succeed without a fixed layout", variableOffsets.tag, 0);
+expect("dynamic offsets are explicitly absent", variableOffsets.fields[0], undefined);
+const maxSize = Ana.Analysis_wireSize(s, DSL.fixedData(2147483647));
+expect("largest valid wire size", maxSize.fields[0].Min, 2147483647);
 
 // ---- Hardware ----
 const abi = Abi.Abi_sysvAmd64;
