@@ -202,12 +202,9 @@ module Field =
 /// Layout constructors and lookups.
 module Layout =
 
-    /// The most fields a register block or struct descriptor declares. A descriptor is a
-    /// hand-declared layout of a peripheral or a C struct, and no such layout has more fields
-    /// than this: a field count beyond it is not a descriptor. The bound is part of the
-    /// vocabulary so that every count derived from a descriptor's fields is a value in
-    /// `[0, MaxFields]`, checked where a descriptor is validated (`Validator.validate` reports
-    /// `FindingKind.TooManyFields`) and the invariant every builder of a layout keeps (`fits`).
+    /// The supported field-count limit of this descriptor vocabulary. Derivation
+    /// and validation both enforce it. It does not bound a field's inline element
+    /// count, byte extent, or bit-field count; those require their own checks.
     [<Literal>]
     let MaxFields = 4096
 

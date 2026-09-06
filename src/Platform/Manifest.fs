@@ -85,7 +85,13 @@ module Manifest =
     let private contractLine (indent: string) (c: Contract) : string =
         let l1 = sp (sp (Text.append indent "contract") c.Name) (kv "logic" c.Logic)
         let l2 = sp l1 (kv "refs" (refsText c.Refs))
-        sp (sp l2 ":") c.Statement
+        // These are the same return facts saturation reads. An observer must
+        // not erase a changed bound while leaving the prose unchanged.
+        let l3 =
+            if Contract.boundsReturn c then
+                sp (sp l2 (kv "floor" (Fmt.ofInt64 c.Floor))) (kv "atmost" c.AtMost)
+            else l2
+        sp (sp l3 ":") c.Statement
 
     let private endpointLine (e: Endpoint) : string =
         let l1 = sp (sp "  endpoint" e.Name) (kv "location" e.Location)

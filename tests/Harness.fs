@@ -25,3 +25,9 @@ let bytesEqual (name: string) (expected: byte array) (actual: byte array) : unit
 let summary () : int =
     printfn "%d passed, %d failed" passed failed
     if failed = 0 then 0 else 1
+
+/// A valid fixture must derive successfully; never supply a fallback descriptor.
+let derived abi name fields =
+    match BAREWire.Hardware.Validator.derive abi name fields with
+    | Ok descriptor -> descriptor
+    | Error findings -> failwithf "fixture %s failed layout derivation: %A" name findings

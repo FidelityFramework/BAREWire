@@ -79,6 +79,25 @@ The Encoding tier needs two things the substrates provide differently: UTF-8 tex
 
 ## 5. The gates
 
+Layout derivation returns `Result<StructDescriptor, LayoutFinding array>`. A consumer
+must handle `Error` before using offsets for a memory view, BTF, or proof. Validation
+reports `extent-overflow` when exact byte arithmetic cannot be represented by the
+hosted descriptor; its `ExpectedSize` is then `None`, never a wrapped size. `Abi.tryAlignUp`
+and `Abi.tryFieldSize` likewise return an option. This implementation limit does not
+define a Clef source-level numeric width. The RoundTrip sample handles derivation
+failure explicitly and exits unsuccessfully.
+
+Representation bounds are checked as exact plain decimal text: an optional sign,
+digits, and an optional fractional part. Integer representations require integer
+text, unsigned ranges cannot include negatives, and the lower bound cannot exceed
+the upper bound. Malformed text is a finding, not an unbounded or rounded range.
+Contract manifests include `floor` and `atmost` whenever a return bound is declared,
+so changing a fact read by saturation changes the observer's output too.
+
+The permanent .NET and JavaScript regressions exercise these boundaries. The JavaScript
+proof gate fails if cvc5 cannot be dispatched; a skipped solver is not proof evidence.
+These hosted gates do not replace the native RoundTrip acceptance gate below.
+
 A `[compilation] target = "library"` compile demotes every type error in unreachable code to an informational message, so it is a weak check: a library with no entry point is all unreachable code. The gate that counts is a reachable program compiled to a native binary and run.
 
 | Gate | Command | What it proves |

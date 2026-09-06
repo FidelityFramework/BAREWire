@@ -52,6 +52,8 @@ module FindingKind =
     [<Literal>]
     let MissingRange: string = "missing-range"
     [<Literal>]
+    let InvalidRange: string = "invalid-range"
+    [<Literal>]
     let WidthMismatch: string = "width-mismatch"
 
 /// The consistency check on a description (docs/11): every tag is one the
@@ -400,8 +402,22 @@ module Check =
         let acc6 =
             if r.Bits > 0 then acc5
             else push acc5 (finding r.Name FindingKind.NonPositiveWidth (Text.append "representation width in bits is not positive: " (Fmt.ofInt r.Bits)))
-        if String.length r.MinMagnitude > 0 && String.length r.MaxMagnitude > 0 then acc6
-        else push acc6 (finding r.Name FindingKind.MissingRange "representation declares no range bounds (MinMagnitude and MaxMagnitude as decimal text)")
+        if String.length r.MinMagnitude = 0 || String.length r.MaxMagnitude = 0 then
+            push acc6 (finding r.Name FindingKind.MissingRange "representation declares no range bounds (MinMagnitude and MaxMagnitude as decimal text)")
+        else
+            let problem =
+                match DecimalText.compare r.MinMagnitude r.MaxMagnitude with
+                | None -> "range bounds must be finite plain decimal text (optional sign, digits, optional fractional part)"
+                | Some order when order > 0 -> "MinMagnitude exceeds MaxMagnitude"
+                | Some _ ->
+                    if (r.Family = RepresentationFamily.Int || r.Family = RepresentationFamily.UInt)
+                       && not (DecimalText.isInteger r.MinMagnitude && DecimalText.isInteger r.MaxMagnitude) then
+                        "integer representation bounds must be integer decimal text"
+                    elif r.Family = RepresentationFamily.UInt && DecimalText.compare r.MinMagnitude "0" = Some -1 then
+                        "unsigned representation range includes negative values"
+                    else ""
+            if String.length problem = 0 then acc6
+            else push acc6 (finding r.Name FindingKind.InvalidRange problem)
 
     /// The declared Register width, or 0 when the core declares none.
     let private registerBits (widths: WidthDeclaration array) : int =

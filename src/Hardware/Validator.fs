@@ -37,13 +37,18 @@ module FindingKind =
     /// The descriptor declares more fields than `Layout.MaxFields`: it is not a descriptor.
     [<Literal>]
     let TooManyFields: FindingKind = "too-many-fields"
+    /// Byte arithmetic cannot be represented by this descriptor implementation.
+    [<Literal>]
+    let ExtentOverflow: FindingKind = "extent-overflow"
+    [<Literal>]
+    let InvalidAbi: FindingKind = "invalid-abi"
 
 /// One disagreement between a descriptor and the ABI's natural layout.
 type LayoutFinding = {
     Field: string
     Kind: FindingKind
-    Expected: int
-    Actual: int
+    Expected: int64
+    Actual: int64
     Message: string
 }
 
@@ -51,7 +56,7 @@ type LayoutFinding = {
 /// every finding. Zero findings means the descriptor agrees with the ABI.
 type LayoutVerdict = {
     Agrees: bool
-    ExpectedSize: int
+    ExpectedSize: int option
     ExpectedAlignment: int
     Findings: LayoutFinding array
 }
@@ -77,50 +82,72 @@ type NamedRepr = {
 module Validator =
 
     let private finding (field: string) (kind: FindingKind) (expected: int) (actual: int) (message: string) : LayoutFinding =
-        { Field = field; Kind = kind; Expected = expected; Actual = actual; Message = message }
+        { Field = field; Kind = kind; Expected = int64 expected; Actual = int64 actual; Message = message }
 
-    /// The natural C layout of a field sequence under an ABI profile. The field-count
-    /// invariant (`Layout.MaxFields`) is checked by `validate`, which every derived
-    /// descriptor is meant to pass through; a sequence beyond it derives a layout that
-    /// `validate` reports as `TooManyFields`.
-    let derive (abi: AbiProfile) (name: string) (fields: NamedRepr array) : StructDescriptor =
-        let n = Array.length fields
-        let out : FieldDescriptor array = Array.zeroCreate n
-        let none : BitFieldDescriptor array = Array.zeroCreate 0
-        let mutable cursor = 0
-        let mutable maxAlign = 1
+    let private push (items: LayoutFinding array) (item: LayoutFinding) : LayoutFinding array =
+        let n = Array.length items
+        let out : LayoutFinding array = Array.zeroCreate (n + 1)
         let mutable i = 0
         while i < n do
-            let f = Array.get fields i
-            let size = Abi.reprSize abi f.Repr
-            let align = Abi.reprAlign abi f.Repr
-            let count = if f.Count < 0 then 0 else f.Count
-            let offset = Abi.alignUp cursor align
-            let placed : FieldDescriptor =
-                { Name = f.Name; Offset = offset; Repr = f.Repr; Count = count; Access = AccessKind.ReadWrite; BitFields = none; Documentation = None }
-            Array.set out i placed
-            cursor <- offset + size * count
-            if align > maxAlign then
-                maxAlign <- align
+            Array.set out i (Array.get items i)
             i <- i + 1
-        let layout : PeripheralLayout = { Size = Abi.alignUp cursor maxAlign; Alignment = maxAlign; Fields = out }
-        { Name = name; Layout = layout; Documentation = None }
+        Array.set out n item
+        out
 
-    /// The findings of a descriptor whose field count `n` is within `Layout.MaxFields` (the
-    /// caller, `validate`, established that bound, so every count below is derived from a
-    /// bounded one: the finding buffer is sized by it).
+    let private overflow (name: string) : LayoutFinding =
+        finding name FindingKind.ExtentOverflow 0 0 "exact byte extent exceeds the descriptor implementation's integer representation"
+
+    let private prerequisites (abi: AbiProfile) (name: string) (n: int) : LayoutFinding array =
+        let mutable issues : LayoutFinding array = [||]
+        if not (Abi.isValid abi) then
+            issues <- push issues (finding abi.Name FindingKind.InvalidAbi 0 0 "ABI sizes and alignments must be positive powers of two within MaxAlign")
+        if n > Layout.MaxFields then
+            issues <- push issues (finding name FindingKind.TooManyFields Layout.MaxFields n "descriptor exceeds the vocabulary's maximum field count")
+        issues
+
+    /// Derive a natural layout, or explicit findings. Failed derivation never
+    /// supplies a descriptor: validation, BTF emission and proof must not be
+    /// handed plausible offsets after arithmetic has lost their meaning.
+    let derive (abi: AbiProfile) (name: string) (fields: NamedRepr array) : Result<StructDescriptor, LayoutFinding array> =
+        let n = Array.length fields
+        let mutable issues = prerequisites abi name n
+        if Array.length issues > 0 then Error issues
+        else
+            let out : FieldDescriptor array = Array.zeroCreate n
+            let mutable cursor = 0
+            let mutable maxAlign = 1
+            let mutable i = 0
+            while i < n && Array.length issues = 0 do
+                let f = Array.get fields i
+                let size = Abi.reprSize abi f.Repr
+                let align = Abi.reprAlign abi f.Repr
+                if not (Repr.isValid f.Repr) then
+                    issues <- push issues (finding f.Name FindingKind.UnknownRepr 0 0 (Text.append "unknown representation " f.Repr))
+                elif f.Count <= 0 then
+                    issues <- push issues (finding f.Name FindingKind.ZeroCount 1 f.Count "inline count must be positive")
+                else
+                    match Abi.tryAlignUp cursor align with
+                    | None -> issues <- push issues (overflow f.Name)
+                    | Some offset ->
+                        match Abi.tryFieldEnd offset size f.Count with
+                        | None -> issues <- push issues (overflow f.Name)
+                        | Some endpoint ->
+                            Array.set out i { Name = f.Name; Offset = offset; Repr = f.Repr; Count = f.Count; Access = AccessKind.ReadWrite; BitFields = [||]; Documentation = None }
+                            cursor <- endpoint
+                            if align > maxAlign then maxAlign <- align
+                i <- i + 1
+            if Array.length issues > 0 then Error issues
+            else
+                match Abi.tryAlignUp cursor maxAlign with
+                | None -> Error [| overflow name |]
+                | Some size -> Ok { Name = name; Layout = { Size = size; Alignment = maxAlign; Fields = out }; Documentation = None }
+
+    /// Validate actual declared offsets and extents as well as natural ABI
+    /// alignment. Unknown arithmetic stays unknown; it never becomes zero.
     let private findingsWithin (abi: AbiProfile) (descriptor: StructDescriptor) (fields: FieldDescriptor array) (n: int) : LayoutVerdict =
-        // Upper bound on findings: three per field, one per bit field, two for the struct.
-        let mutable bitCount = 0
-        let mutable k = 0
-        while k < n do
-            let f = Array.get fields k
-            bitCount <- bitCount + Array.length f.BitFields
-            k <- k + 1
-        let buf : LayoutFinding array = Array.zeroCreate (3 * n + bitCount + 2)
-        let mutable count = 0
+        let mutable issues : LayoutFinding array = [||]
         let mutable prevStart = 0
-        let mutable prevEnd = 0
+        let mutable prevEnd = Some 0
         let mutable maxAlign = 1
         let mutable i = 0
         while i < n do
@@ -129,79 +156,93 @@ module Validator =
             let size = Abi.reprSize abi f.Repr
             let align = Abi.reprAlign abi f.Repr
             if not known then
-                Array.set buf count (finding f.Name FindingKind.UnknownRepr 0 0 (Text.append "unknown representation " f.Repr))
-                count <- count + 1
+                issues <- push issues (finding f.Name FindingKind.UnknownRepr 0 0 (Text.append "unknown representation " f.Repr))
             if f.Count <= 0 then
-                Array.set buf count (finding f.Name FindingKind.ZeroCount 1 f.Count "inline count must be positive")
-                count <- count + 1
-            let expected = Abi.alignUp prevEnd align
-            if known && f.Offset % align <> 0 then
-                Array.set buf count (finding f.Name FindingKind.Misaligned align f.Offset (Text.append "offset is not a multiple of the natural alignment " (Fmt.ofInt align)))
-                count <- count + 1
-            elif i > 0 && f.Offset < prevStart then
-                Array.set buf count (finding f.Name FindingKind.OffsetMismatch expected f.Offset "field is declared before the field preceding it")
-                count <- count + 1
-            elif f.Offset < prevEnd then
-                Array.set buf count (finding f.Name FindingKind.Overlap prevEnd f.Offset (Text.append "field begins inside the preceding field, which ends at " (Fmt.ofInt prevEnd)))
-                count <- count + 1
-            elif f.Offset > expected then
-                Array.set buf count (finding f.Name FindingKind.Gap expected f.Offset (Text.append (Text.append (Fmt.ofInt (f.Offset - expected)) " unexplained bytes before the field; natural offset is ") (Fmt.ofInt expected)))
-                count <- count + 1
-            let bits = size * 8
+                issues <- push issues (finding f.Name FindingKind.ZeroCount 1 f.Count "inline count must be positive")
+            match prevEnd with
+            | None -> ()
+            | Some endpoint ->
+                match Abi.tryAlignUp endpoint align with
+                | None ->
+                    issues <- push issues (overflow f.Name)
+                    prevEnd <- None
+                | Some expected ->
+                    if known && f.Offset % align <> 0 then
+                        issues <- push issues (finding f.Name FindingKind.Misaligned align f.Offset "offset is not a multiple of the natural alignment")
+                    elif i > 0 && f.Offset < prevStart then
+                        issues <- push issues (finding f.Name FindingKind.OffsetMismatch expected f.Offset "field is declared before the field preceding it")
+                    elif f.Offset < endpoint then
+                        issues <- push issues (finding f.Name FindingKind.Overlap endpoint f.Offset "field begins inside the preceding field")
+                    elif f.Offset > expected then
+                        issues <- push issues (finding f.Name FindingKind.Gap expected f.Offset "unexplained bytes before the field")
+            let bits = int64 size * 8L
             let bitFields = f.BitFields
             let bn = Array.length bitFields
             let mutable b = 0
             while b < bn do
                 let bf = Array.get bitFields b
-                let top = bf.Position + bf.Width
+                // Widen each operand first: Position + Width may overflow even
+                // when the register itself is only eight bytes wide.
+                let top = int64 bf.Position + int64 bf.Width
                 if bf.Position < 0 || bf.Width < 1 || top > bits then
                     let where = Text.append (Text.append f.Name ".") bf.Name
-                    Array.set buf count (finding where FindingKind.BitFieldOutOfRange bits top (Text.append "bit field does not fit a register of width " (Fmt.ofInt bits)))
-                    count <- count + 1
+                    issues <- push issues { Field = where; Kind = FindingKind.BitFieldOutOfRange; Expected = bits; Actual = top
+                                            Message = Text.append "bit field does not fit a register of width " (Fmt.ofInt64 bits) }
                 b <- b + 1
-            let elements = if f.Count < 0 then 0 else f.Count
-            let fieldEnd = f.Offset + size * elements
+            if known && f.Count > 0 then
+                match Abi.tryFieldEnd f.Offset size f.Count with
+                | None ->
+                    issues <- push issues (overflow f.Name)
+                    prevEnd <- None
+                | Some fieldEnd ->
+                    match prevEnd with
+                    | Some endpoint when fieldEnd > endpoint -> prevEnd <- Some fieldEnd
+                    | _ -> ()
+            else prevEnd <- None
             prevStart <- f.Offset
-            if fieldEnd > prevEnd then
-                prevEnd <- fieldEnd
-            if known && align > maxAlign then
-                maxAlign <- align
+            if known && align > maxAlign then maxAlign <- align
             i <- i + 1
-        let expectedSize = Abi.alignUp prevEnd maxAlign
-        if descriptor.Layout.Size <> expectedSize then
-            Array.set buf count (finding descriptor.Name FindingKind.SizeMismatch expectedSize descriptor.Layout.Size (Text.append "declared size differs from the natural size " (Fmt.ofInt expectedSize)))
-            count <- count + 1
+        let expectedSize =
+            match prevEnd with
+            | None -> None
+            | Some endpoint ->
+                let aligned = Abi.tryAlignUp endpoint maxAlign
+                if aligned = None then issues <- push issues (overflow descriptor.Name)
+                aligned
+        match expectedSize with
+        | Some size when descriptor.Layout.Size <> size ->
+            issues <- push issues (finding descriptor.Name FindingKind.SizeMismatch size descriptor.Layout.Size "declared size differs from the natural size")
+        | _ -> ()
         if descriptor.Layout.Alignment <> maxAlign then
-            Array.set buf count (finding descriptor.Name FindingKind.AlignmentMismatch maxAlign descriptor.Layout.Alignment (Text.append "declared alignment differs from the natural alignment " (Fmt.ofInt maxAlign)))
-            count <- count + 1
-        { Agrees = count = 0; ExpectedSize = expectedSize; ExpectedAlignment = maxAlign; Findings = Array.sub buf 0 count }
+            issues <- push issues (finding descriptor.Name FindingKind.AlignmentMismatch maxAlign descriptor.Layout.Alignment "declared alignment differs from the natural alignment")
+        { Agrees = Array.length issues = 0; ExpectedSize = expectedSize; ExpectedAlignment = maxAlign; Findings = issues }
 
-    /// Check a declared descriptor against the ABI's natural layout rules. A descriptor with
-    /// more fields than `Layout.MaxFields` is not a descriptor: the verdict is that one finding,
-    /// and every other count is derived from a field count within the declared bound.
+    /// Check the declaration; bounding field count alone does not bound byte
+    /// extents or the number of bit-field findings. Each is checked on its own.
     let validate (abi: AbiProfile) (descriptor: StructDescriptor) : LayoutVerdict =
         let fields = descriptor.Layout.Fields
         let n = Array.length fields
-        if n > Layout.MaxFields then
-            let only = finding descriptor.Name FindingKind.TooManyFields Layout.MaxFields n (Text.append "the descriptor declares more fields than the vocabulary's maximum of " (Fmt.ofInt Layout.MaxFields))
-            { Agrees = false; ExpectedSize = 0; ExpectedAlignment = 1; Findings = [| only |] }
-        else
-            findingsWithin abi descriptor fields n
+        let issues = prerequisites abi descriptor.Name n
+        if Array.length issues > 0 then
+            { Agrees = false; ExpectedSize = None; ExpectedAlignment = 1; Findings = issues }
+        else findingsWithin abi descriptor fields n
 
     /// One line per finding: `field: kind expected N actual M; message`.
     /// A verdict with no findings explains itself as agreement.
     let explain (verdict: LayoutVerdict) : string =
         let n = Array.length verdict.Findings
         if n = 0 then
-            Text.append (Text.append (Text.append "agrees: size " (Fmt.ofInt verdict.ExpectedSize)) " alignment ") (Fmt.ofInt verdict.ExpectedAlignment)
+            match verdict.ExpectedSize with
+            | Some size -> Text.append (Text.append (Text.append "agrees: size " (Fmt.ofInt size)) " alignment ") (Fmt.ofInt verdict.ExpectedAlignment)
+            | None -> "layout extent is unresolved"
         else
             let lines : string array = Array.zeroCreate n
             let mutable i = 0
             while i < n do
                 let f = Array.get verdict.Findings i
                 let head = Text.append (Text.append f.Field ": ") f.Kind
-                let exp = Text.append " expected " (Fmt.ofInt f.Expected)
-                let act = Text.append " actual " (Fmt.ofInt f.Actual)
+                let exp = Text.append " expected " (Fmt.ofInt64 f.Expected)
+                let act = Text.append " actual " (Fmt.ofInt64 f.Actual)
                 let line = Text.append (Text.append (Text.append head exp) act) (Text.append "; " f.Message)
                 Array.set lines i line
                 i <- i + 1

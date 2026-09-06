@@ -70,6 +70,25 @@ let run () =
     check "unknown boundary is a finding" (Check.run badBoundary |> Array.exists (fun f -> f.Kind = FindingKind.UnknownTag)) (Check.explain (Check.run badBoundary))
     let noRange = withCore (TargetCore.withRepresentations linuxCore [| Representation.create "int32" Capability.Native RepresentationFamily.Int 32 "" "" Boundary.Wrap |])
     check "representation without range bounds is a finding" (Check.run noRange |> Array.exists (fun f -> f.Kind = FindingKind.MissingRange)) (Check.explain (Check.run noRange))
+    let checkRange family lo hi =
+        Check.run (withCore (TargetCore.withRepresentations linuxCore
+            [| Representation.create "audit" Capability.Native family 64 lo hi Boundary.Exact |]))
+    for lo, hi in [ "not-a-number", "NaN"; "127", "-128"; " ", " "; "1..0", "2"; "--1", "2"; "0", "+"; "0", "Infinity" ] do
+        let findings = checkRange RepresentationFamily.Ieee lo hi
+        check (sprintf "malformed or reversed range %A/%A is rejected" lo hi) (findings.Length > 0) (Check.explain findings)
+    for lo, hi in [ "-0.00000000000000000001", "0.00000000000000000001"; "0001.00", "+1"; "-0", "0.0";
+                    "9007199254740992", "9007199254740993"; "-9999999999999999999999999999999999999999", "9999999999999999999999999999999999999999" ] do
+        equal (sprintf "exact range %s/%s is accepted" lo hi) 0 (checkRange RepresentationFamily.Ieee lo hi).Length
+    for lo, hi in [ "9007199254740993", "9007199254740992"; "1.00000000000000000001", "1.00000000000000000000"; "-0.001", "-0.01" ] do
+        check (sprintf "exact reversed range %s/%s is rejected" lo hi) ((checkRange RepresentationFamily.Ieee lo hi).Length > 0) "accepted after rounding or incorrect sign ordering"
+    check "integer representation requires integer bounds" ((checkRange RepresentationFamily.Int "-1.5" "1.5").Length > 0) "fractional integer range"
+    check "unsigned representation cannot include negatives" ((checkRange RepresentationFamily.UInt "-1" "255").Length > 0) "negative unsigned range"
+    let bounded floor parameter =
+        let endpoint = Endpoint.syscall "read" 0 [| Contract.withReturnBound readContract floor parameter |]
+        { linux with Surfaces = [| BoundarySurface.create "syscalls" SurfaceKind.Syscall [| endpoint |] |] }
+    let boundedManifest = Manifest.emit (bounded -4095L "count")
+    check "manifest records changed return floor" (boundedManifest <> Manifest.emit (bounded 0L "count")) "Floor was erased"
+    check "manifest records changed bound parameter" (boundedManifest <> Manifest.emit (bounded -4095L "capacity")) "AtMost was erased"
     let manifest = Manifest.emit linux
     check "manifest declares the Register width" (manifest.Contains "width Register bits=64") manifest
     check "manifest declares posit32 emulated" (manifest.Contains "representation posit32 capability=emulated family=posit bits=32") manifest
@@ -159,7 +178,7 @@ let run () =
     let abi = Abi.sysvAmd64
     let named (n: string) (r: Repr) : NamedRepr = { Name = n; Repr = r; Count = 1 }
     let frame =
-        Validator.derive abi "CloseEncounterFrame" [|
+        derived abi "CloseEncounterFrame" [|
             named "bodyA" Repr.U32; named "bodyB" Repr.U32; named "timestep" Repr.U32
             { Name = "force"; Repr = Repr.U32; Count = 3 }            // three b-posit32 components
             { Name = "quire"; Repr = Repr.U32; Count = 25 } |]        // the 800-bit quire: 25 32-bit words

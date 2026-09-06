@@ -77,11 +77,31 @@ module Abi =
         elif repr = Repr.Pointer then abi.PointerAlign
         else 1
 
-    /// The smallest multiple of `align` that is at least `value`; `value` itself when `align` is 1 or less.
-    let alignUp (value: int) (align: int) : int =
-        if align <= 1 then value
-        else ((value + align - 1) / align) * align
+    /// A profile must give positive scalar sizes and power-of-two alignments.
+    let isValid (abi: AbiProfile) : bool =
+        let powerOfTwo (n: int) : bool = n > 0 && (n &&& (n - 1)) = 0
+        powerOfTwo abi.PointerSize && powerOfTwo abi.PointerAlign
+        && powerOfTwo abi.I64Align && powerOfTwo abi.F64Align && powerOfTwo abi.MaxAlign
+        && abi.PointerAlign <= abi.MaxAlign && abi.I64Align <= abi.MaxAlign && abi.F64Align <= abi.MaxAlign
 
-    /// The byte extent of a field: element size times inline count.
-    let fieldSize (abi: AbiProfile) (field: FieldDescriptor) : int =
-        (reprSize abi field.Repr) * field.Count
+    // The hosted descriptor's int fields must represent the exact result.
+    // A failed narrowing is an implementation limit, never a smaller layout
+    // or a source-level restriction on dimensions. No consumer gets that result.
+    let private extent (value: int64) : int option =
+        let narrowed = int value
+        if value >= 0L && int64 narrowed = value then Some narrowed else None
+
+    /// Exact alignment, or None if invalid or not representable by a descriptor.
+    let tryAlignUp (value: int) (align: int) : int option =
+        if value < 0 || align <= 0 then None
+        else extent (((int64 value + int64 align - 1L) / int64 align) * int64 align)
+
+    /// Exact byte endpoint, or None. Widen before multiplication and addition;
+    /// checking only the wrapped endpoint cannot detect a 4 GiB field.
+    let tryFieldEnd (offset: int) (size: int) (count: int) : int option =
+        if offset < 0 || size <= 0 || count <= 0 then None
+        else extent (int64 offset + int64 size * int64 count)
+
+    /// Exact byte extent of a field, or None for invalid/unrepresentable input.
+    let tryFieldSize (abi: AbiProfile) (field: FieldDescriptor) : int option =
+        tryFieldEnd 0 (reprSize abi field.Repr) field.Count

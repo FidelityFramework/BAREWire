@@ -61,16 +61,22 @@ let main argv =
 
     // ---- Hardware: the layout validator on sockaddr_in ----
     let abi = Abi.sysvAmd64
-    let sockaddr =
+    let sockaddrResult =
         Validator.derive abi "sockaddr_in" [|
             named "sin_family" Repr.U16
             named "sin_port" Repr.U16
             named "sin_addr" Repr.U32
             { Name = "sin_zero"; Repr = Repr.U8; Count = 8 } |]
-    show "sockaddrsize" sockaddr.Layout.Size
-    let verdict = Validator.validate abi sockaddr
-    show "sockaddragrees" (if verdict.Agrees then 1 else 0)
-    show "pointerfree" (if Layout.isPointerFree sockaddr.Layout then 1 else 0)
+    let mutable layoutFailed = false
+    match sockaddrResult with
+    | Error findings ->
+        layoutFailed <- true
+        show "layoutfindings" (Array.length findings)
+    | Ok sockaddr ->
+        show "sockaddrsize" sockaddr.Layout.Size
+        let verdict = Validator.validate abi sockaddr
+        show "sockaddragrees" (if verdict.Agrees then 1 else 0)
+        show "pointerfree" (if Layout.isPointerFree sockaddr.Layout then 1 else 0)
 
     // ---- Platform: a description, checked, and its obligations ----
     let readContract = Contract.assumed "read-bound" "writes at most count bytes into buf; returns n <= count; n = 0 is end of input" [| "CWE-120" |]
@@ -93,4 +99,4 @@ let main argv =
         Console.writeln (Obligations.ledgerLine o)
         i <- i + 1
     show "readlncapacity" (int (PlatformDescription.capacityOf desc "consoleReadln"))
-    0
+    if layoutFailed then 1 else 0

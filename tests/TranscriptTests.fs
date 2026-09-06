@@ -55,7 +55,7 @@ let transcript () : string array =
     show "helloconsumed" hc
     showText "hellobuild" hv.Build
     let abi = Abi.sysvAmd64
-    let sockaddr = Validator.derive abi "sockaddr_in" [| named "sin_family" Repr.U16; named "sin_port" Repr.U16; named "sin_addr" Repr.U32; { Name = "sin_zero"; Repr = Repr.U8; Count = 8 } |]
+    let sockaddr = derived abi "sockaddr_in" [| named "sin_family" Repr.U16; named "sin_port" Repr.U16; named "sin_addr" Repr.U32; { Name = "sin_zero"; Repr = Repr.U8; Count = 8 } |]
     show "sockaddrsize" sockaddr.Layout.Size
     let verdict = Validator.validate abi sockaddr
     show "sockaddragrees" (if verdict.Agrees then 1 else 0)

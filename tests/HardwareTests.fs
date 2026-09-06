@@ -14,13 +14,13 @@ let private counted (name: string) (repr: Repr) (count: int) : NamedRepr = { Nam
 let run () =
     let abi = Abi.sysvAmd64
     // sockaddr_in: 2 + 2 + 4 + 8 = 16 under SysV AMD64
-    let sockaddr = Validator.derive abi "sockaddr_in" [| named "sin_family" Repr.U16; named "sin_port" Repr.U16; named "sin_addr" Repr.U32; counted "sin_zero" Repr.U8 8 |]
+    let sockaddr = derived abi "sockaddr_in" [| named "sin_family" Repr.U16; named "sin_port" Repr.U16; named "sin_addr" Repr.U32; counted "sin_zero" Repr.U8 8 |]
     equal "sockaddr_in size" 16 sockaddr.Layout.Size
     equal "sockaddr_in alignment" 4 sockaddr.Layout.Alignment
     let v = Validator.validate abi sockaddr
     equal "derived descriptor agrees" true v.Agrees
     // hipExternalMemoryHandleDesc-shaped: type (i32), handle (union as widest member: two pointers), size (u64), flags (u32)
-    let hip = Validator.derive abi "hipExternalMemoryHandleDesc" [| named "type" Repr.I32; counted "handle" Repr.Pointer 2; named "size" Repr.U64; named "flags" Repr.U32 |]
+    let hip = derived abi "hipExternalMemoryHandleDesc" [| named "type" Repr.I32; counted "handle" Repr.Pointer 2; named "size" Repr.U64; named "flags" Repr.U32 |]
     equal "hip handle at 8" 8 hip.Layout.Fields.[1].Offset
     equal "hip size at 24" 24 hip.Layout.Fields.[2].Offset
     equal "hip struct size" 40 hip.Layout.Size
@@ -37,10 +37,49 @@ let run () =
     let pv = Validator.validate abi epollPacked
     equal "packed epoll_event as two u32 agrees at 12" true pv.Agrees
     // 32-bit ARM AAPCS aligns i64 to 8; i386 SysV to 4
-    let pair32 = Validator.derive Abi.i386SysV "pair" [| named "a" Repr.U32; named "b" Repr.I64 |]
+    let pair32 = derived Abi.i386SysV "pair" [| named "a" Repr.U32; named "b" Repr.I64 |]
     equal "i386 i64 at 4" 4 pair32.Layout.Fields.[1].Offset
-    let pairArm = Validator.derive Abi.armAapcs "pair" [| named "a" Repr.U32; named "b" Repr.I64 |]
+    let pairArm = derived Abi.armAapcs "pair" [| named "a" Repr.U32; named "b" Repr.I64 |]
     equal "aapcs i64 at 8" 8 pairArm.Layout.Fields.[1].Offset
+
+    // A large count is a small descriptor, not a large allocation. Its byte
+    // arithmetic must not wrap into a layout that validation calls sound.
+    let huge = StructLayout.create "huge" (Layout.create 0 8 [| Field.array "data" 0 Repr.U64 536870912 AccessKind.ReadWrite |]) None
+    let hugeVerdict = Validator.validate abi huge
+    equal "4 GiB field is not a valid zero-byte layout" false hugeVerdict.Agrees
+    equal "overflow supplies no fabricated expected size" None hugeVerdict.ExpectedSize
+    let rejects name fields kind =
+        match Validator.derive abi name fields with
+        | Ok layout -> check name false (sprintf "fabricated layout: %A" layout)
+        | Error findings -> check name (findings |> Array.exists (fun f -> f.Kind = kind)) (sprintf "%A" findings)
+    rejects "derivation rejects 4 GiB field" [| counted "data" Repr.U64 536870912 |] FindingKind.ExtentOverflow
+    rejects "derivation rejects offset plus extent overflow" [| counted "prefix" Repr.U8 (System.Int32.MaxValue - 1); counted "suffix" Repr.U8 2 |] FindingKind.ExtentOverflow
+    rejects "derivation rejects alignment overflow" [| counted "prefix" Repr.U8 System.Int32.MaxValue; named "aligned" Repr.U64 |] FindingKind.ExtentOverflow
+    rejects "derivation rejects trailing padding overflow" [| named "aligned" Repr.U64; counted "suffix" Repr.U8 (System.Int32.MaxValue - 8) |] FindingKind.ExtentOverflow
+    rejects "derivation rejects unknown representation" [| named "unknown" "future" |] FindingKind.UnknownRepr
+    for count in [ 0; -1 ] do
+        rejects (sprintf "derivation rejects count %d" count) [| counted "data" Repr.U8 count |] FindingKind.ZeroCount
+    rejects "derivation enforces maximum field count" (Array.init (Layout.MaxFields + 1) (fun _ -> named "field" Repr.U8)) FindingKind.TooManyFields
+    equal "largest representable byte extent remains valid" System.Int32.MaxValue (derived abi "largest" [| counted "bytes" Repr.U8 System.Int32.MaxValue |]).Layout.Size
+    for invalid in [ { abi with PointerAlign = 0 }; { abi with I64Align = 3 }; { abi with PointerSize = -1 } ] do
+        match Validator.derive invalid "invalid ABI" [| named "ptr" Repr.Pointer |] with
+        | Error findings -> check "invalid ABI is diagnosed" (findings |> Array.exists (fun f -> f.Kind = FindingKind.InvalidAbi)) (sprintf "%A" findings)
+        | Ok _ -> check "invalid ABI is diagnosed" false "accepted"
+        equal "validation rejects invalid ABI without division by zero" false (Validator.validate invalid sockaddr).Agrees
+    let limit = derived abi "max fields" (Array.init Layout.MaxFields (fun i -> named (string i) Repr.U8))
+    equal "maximum permitted field count is valid" true (Validator.validate abi limit).Agrees
+    let many = { limit with Layout = { limit.Layout with Fields = Array.append limit.Layout.Fields [| limit.Layout.Fields.[0] |] } }
+    check "validation enforces maximum field count" ((Validator.validate abi many).Findings |> Array.exists (fun f -> f.Kind = FindingKind.TooManyFields)) "too many fields accepted"
+    let register = StructLayout.create "register" (Layout.create 8 8 [| Field.simple "value" 0 Repr.U64 AccessKind.ReadWrite |]) None
+    let invalidBits position width =
+        let bits = { Name = "bits"; Position = position; Width = width; Access = AccessKind.ReadOnly }
+        let field = { register.Layout.Fields.[0] with BitFields = [| bits |] }
+        { register with Layout = { register.Layout with Fields = [| field |] } }
+    for position, width in [ System.Int32.MaxValue, 1; 1, System.Int32.MaxValue; -1, 1; 0, 0; 63, 2 ] do
+        let verdict = Validator.validate abi (invalidBits position width)
+        check (sprintf "bit range %d + %d is rejected" position width)
+            (not verdict.Agrees && verdict.Findings |> Array.exists (fun f -> f.Kind = FindingKind.BitFieldOutOfRange)) (Validator.explain verdict)
+    equal "last register bit remains valid" true (Validator.validate abi (invalidBits 63 1)).Agrees
 
     // pointer-free: the kernel's information-flow rule at the type level
     equal "sockaddr_in is pointer-free" true (Layout.isPointerFree sockaddr.Layout)

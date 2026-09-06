@@ -32,6 +32,8 @@ const Btf = await load("Hardware/Btf.js");
 const P = await load("Platform/Description.js");
 const Check = await load("Platform/Check.js");
 const Obl = await load("Platform/Obligations.js");
+const Manifest = await load("Platform/Manifest.js");
+const Decimal = await load("Platform/DecimalText.js");
 
 let failures = 0;
 const expect = (name, actual, expected) => {
@@ -54,12 +56,28 @@ expect("fixed struct fixed", size.IsFixed, true);
 
 // ---- Hardware ----
 const abi = Abi.Abi_sysvAmd64;
-const sock = V.Validator_derive(abi, "sockaddr_in", [
+const sockResult = V.Validator_derive(abi, "sockaddr_in", [
   new V.NamedRepr("sin_family", "u16", 1), new V.NamedRepr("sin_port", "u16", 1),
   new V.NamedRepr("sin_addr", "u32", 1), new V.NamedRepr("sin_zero", "u8", 8)]);
+expect("sockaddr derives successfully", sockResult.tag, 0);
+if (sockResult.tag !== 0) throw new Error("valid layout failed to derive");
+const sock = sockResult.fields[0];
+const huge = V.Validator_derive(abi, "huge", [new V.NamedRepr("data", "u64", 536870912)]);
+expect("4 GiB layout is rejected", huge.tag, 1);
 expect("sockaddr size", sock.Layout.Size, 16);
 expect("sockaddr agrees", V.Validator_validate(abi, sock).Agrees, true);
 expect("sockaddr pointer-free", Desc.Layout_isPointerFree(sock.Layout), true);
+const bits = new Desc.BitFieldDescriptor("bad", 2147483647, 1, "read-only");
+const field = new Desc.FieldDescriptor("register", 0, "u64", 1, "read-only", [bits], undefined);
+const badBits = new Desc.StructDescriptor("badBits", new Desc.PeripheralLayout(8, 8, [field]), undefined);
+expect("bit-field endpoint cannot wrap", V.Validator_validate(abi, badBits).Agrees, false);
+for (const [lo, hi, order] of [
+  ["9007199254740993", "9007199254740992", 1],
+  ["1.00000000000000000001", "1.00000000000000000000", 1],
+  ["-0.001", "-0.01", 1], ["0001.00", "+1", 0], ["-0", "0.0", 0],
+  ["-999999999999999999999999999999", "999999999999999999999999999999", -1]]) {
+  expect(`exact decimal ${lo}/${hi}`, Decimal.compare(lo, hi), order);
+}
 const blob = Btf.Btf_emit(abi, [sock]);
 const image = Btf.Btf_read(blob);
 expect("btf parses", image.Ok, true);
@@ -78,6 +96,18 @@ const surfaces = [P.BoundarySurfaceModule_create("syscalls", "syscall", [P.Endpo
 const buffers = [P.BufferSchemaModule_delimited("consoleReadln", "str", 1024n, 10, true, "arena")];
 const desc = new P.PlatformDescription("cpu-linux-x86_64", "Linux x86-64 (libc)", "CPU", undefined, spaces, surfaces, buffers, [],
   P["Lifecycle_process$0027"]("_start", "exit_group", "volatile"), [], []);
+const boundedDescription = (floor, parameter) => {
+  const contract = P.ContractModule_withReturnBound(readContract, floor, parameter);
+  return {...desc, Surfaces: [P.BoundarySurfaceModule_create("syscalls", "syscall", [P.EndpointModule_syscall("read", 0, [contract])])]};
+};
+const boundedManifest = Manifest.emit(boundedDescription(-4095n, "count"));
+expect("manifest carries changed floor", boundedManifest !== Manifest.emit(boundedDescription(0n, "count")), true);
+expect("manifest carries changed bound parameter", boundedManifest !== Manifest.emit(boundedDescription(-4095n, "capacity")), true);
+for (const [lo, hi] of [["NaN", "1"], ["127", "-128"], [" ", " "], ["1.00000000000000000001", "1"]]) {
+  const core = P.TargetCoreModule_withRepresentations(P.TargetCoreModule_create("linux", "x86_64", 64, "little", "libc"),
+    [P.RepresentationModule_create("audit", "native", "ieee", 64, lo, hi, "exact")]);
+  expect(`invalid representation ${lo}/${hi}`, Check.Check_run({...desc, Core: core}).some(f => f.Kind === "invalid-range"), true);
+}
 const findings = Check.Check_run(desc);
 expect("linux description consistent", findings.length, 0);
 const obs = Obl.Obligations_ofDescription(desc);
@@ -89,7 +119,8 @@ for (const o of obs) {
   const path = resolve(tmpdir(), `barewire-js-${o.Id}.smt2`);
   writeFileSync(path, Obl.Obligations_smtLib(o).replace("(reset)", ""));
   const r = spawnSync("cvc5", [path], { encoding: "utf8" });
-  if (r.error) { console.log("note: cvc5 not available; obligations not dispatched from JavaScript"); break; }
+  if (r.error) { failures++; console.error(`FAIL cvc5 ${o.Id}: ${r.error.message}`); break; }
+  expect(`cvc5 exit ${o.Id}`, r.status, 0);
   expect(`cvc5 ${o.Id}`, r.stdout.trim(), "unsat");
   dispatched++;
 }
