@@ -146,6 +146,22 @@ type StructDescriptor = {
     Documentation: string option
 }
 
+/// Declarative Cortex-M image placement and debugger identity. Application
+/// startup sources and interrupt handlers belong to the project, not this map.
+type CortexMImageDescriptor = {
+    FlashSpace: string
+    RamSpace: string
+    VectorLayout: string
+    VectorAlignment: int
+    StackBytes: int
+    EntrySymbol: string
+    DebugDevice: string
+    PartNumber: string
+    PartNumberAddress: int64
+    PreservedOptionAddress: int64
+    PreservedOptionBytes: int
+}
+
 /// Facts about memory region kinds (docs/08 table).
 module MemoryRegion =
 
