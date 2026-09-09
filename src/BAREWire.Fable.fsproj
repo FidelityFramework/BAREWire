@@ -34,6 +34,8 @@
     <Compile Include="Memory/View.fs" />
     <Compile Include="Platform/Tags.fs" />
     <Compile Include="Platform/Description.fs" />
+    <Compile Include="Platform/StaticStorage.fs" />
+    <Compile Include="Platform/DispatchRegions.fs" />
     <Compile Include="Platform/DecimalText.fs" />
     <Compile Include="Platform/Check.fs" />
     <Compile Include="Platform/Manifest.fs" />

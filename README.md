@@ -1,6 +1,6 @@
 # BAREWire
 
-The typed contract between Clef components, and the declared authority on memory layout for every processor a program runs on. Part of the Fidelity Framework.
+Shared contract and representation glue for memory layout, IPC, and network communication across the Fidelity Framework. BAREWire connects declarations to their byte layouts; the final lowered payload carries no type, schema, dimension, or proof tags.
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![License: Commercial](https://img.shields.io/badge/License-Commercial-orange.svg)](Commercial.md)
@@ -12,7 +12,9 @@ The typed contract between Clef components, and the declared authority on memory
 
 ## What BAREWire is
 
-A value that crosses a BAREWire boundary arrives with its case structure, its payload types, and its dimensional annotations intact, by construction and without tagging. The contract is a design-time fact that erases; the mapping from it to bytes is fixed at compile time and held by both sides; the wire is [BARE](https://baremessages.org/), untagged bytes that carry no types at all ([Substrate_Formalism](docs/Substrate_Formalism.md), "Three layers"). What BAREWire adds to the encoding is the discipline that keeps the first layer true across the third. Read inward, the same vocabulary is a platform's declared memory layout: memory spaces with capacities, buffer schemas with capacity and framing, boundary surfaces with declared contracts, transports. The compiler observes one declaration three ways, in emission, in constraint generation, and in proof obligations ([11 Platform Description](docs/11%20Platform%20Description.md)).
+BAREWire declares how participating components interpret memory and transmitted bytes. Source types, dimensions, layouts, and proof obligations remain available in the compiler's PSG/codata until their role is fulfilled. At final lowering, the payload is untagged with respect to that compiler metadata. Application union case indices, presence bits, and protocol framing remain where the declared format requires them. Endpoint agreement and preservation through lowering connect the contract to the bytes; payload tags do not establish that agreement ([Substrate_Formalism](docs/Substrate_Formalism.md), "Three layers").
+
+The same declarations describe a platform's memory spaces, capacities, buffer layouts, boundary surfaces, and transports. Emission, constraint generation, and proof obligations must refer to those same declarations ([11 Platform Description](docs/11%20Platform%20Description.md)). This makes BAREWire shared glue for local memory access, IPC, and network boundaries, with implementation coverage recorded in [Implementation Status](docs/Implementation%20Status.md).
 
 Two missions, ranked ([docs/README](docs/README.md)):
 
@@ -53,15 +55,21 @@ The three transcripts agree on the same values; that agreement is the cross-subs
 | HelloArty (Arty A7) | The descriptor vocabulary the FPGA description grows into: BRAM and register memory spaces, the UART transport carrying `ArtyReport`. |
 | Farscape, HelloWayland | The `StructDescriptor` validator: a descriptor plus a target ABI in, an agreement verdict out. |
 
+## Compiler and editor tooling
+
+[Platform/Obligations.fs](src/Platform/Obligations.fs) owns the declaration-derived obligation forms and their current `ofDescription`, `smtLib`, and `ledgerLine` projections. The [JavaScript gate](tests/js/tiers.mjs) generates solver input and checks external cvc5 results; [Intersection Subset §5.1](docs/12%20Intersection%20Subset.md#51-what-the-javascript-solver-gate-establishes) records what those queries establish. This is evidence about the encoded declaration models, with separate obligations connecting them to emitted operations.
+
+The [Lattice integration plan](https://github.com/FidelityFramework/Composer/blob/main/docs/Lattice_Integration.md) brings CCS results to a planned .NET-hosted Lattice server under Composer. The intended editor views expose the relevant layout, dimension, diagnostic, and proof status from the compiler. Live graph projection, verdict delivery, and edit invalidation remain integration work. The external ledger remains a reconciliation scaffold while the proof-carrying graph matures. Editors use standard LSP; this plan does not introduce an implemented BAREWire binary editor transport.
+
 ## The Fidelity Framework
 
 | Project | Role |
 | --- | --- |
-| **Clef / CCS** | The language and its compiler services; the native type universe |
-| **Composer** | AOT compiler: Clef → PSG → MLIR → native |
-| **Fidelity.Platform** | Per-target platform source trees; depends on BAREWire for its descriptions |
-| **Farscape** | C/C++ header parsing for native library bindings; consumes the descriptor vocabulary |
-| **XParsec** | Parser combinators powering PSG traversal and header parsing |
+| [Clef / CCS](https://github.com/FidelityFramework/clef) | The language and its compiler services; the native type universe |
+| [Composer](https://github.com/FidelityFramework/Composer) | AOT compiler: Clef → PSG → MLIR → native |
+| [Fidelity.Platform](https://github.com/FidelityFramework/Fidelity.Platform) | Per-target platform source trees; depends on BAREWire for its descriptions |
+| [Farscape](https://github.com/FidelityFramework/Farscape) | C/C++ header parsing for native library bindings; consumes the descriptor vocabulary |
+| [XParsec](https://github.com/FidelityFramework/XParsec) | Parser combinators powering PSG traversal and header parsing |
 
 ## Documentation
 

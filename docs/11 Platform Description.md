@@ -30,6 +30,17 @@ The lesson is that **CPUs have every one of those facts too; they are merely hid
 
 The last row is the deepest one. Today the CPU path inverts the FPGA's discipline: the linker chooses and the toolchain audits afterward. The generalization gives the CPU its XDC — the compiler emits layout constraints *from* the BAREWire declaration — so layout becomes **declared, directed, then confirmed**, with the confirmation (ELF cross-check, and the Rocq observer outside the compilation accounting) closing a loop the framework opened on purpose.
 
+## HelloWayland: the next extraction
+
+HelloWayland extends this method to parallel execution. Its shadow-table defect
+showed that a shared calculation still needs a complete input view; its multi-core
+CPU design adds exclusive output slices and completion before reuse.
+[13 Dispatch Regions](./13%20Dispatch%20Regions.md) extracts the common memory
+contract, with the same declaration feeding emission and obligations. The
+compiler binds those facts to the access and lifetime graph, and Ariel realizes
+the synchronization and dispatch contract. This is proposed integration work;
+existing layout validation does not itself establish scheduler behavior.
+
 ## Three observers, one truth
 
 The FPGA path has two observers of the platform declaration: code emission and constraint emission. The generalization adds the third: **the proof-obligation coeffect**. One BAREWire declaration, observed by

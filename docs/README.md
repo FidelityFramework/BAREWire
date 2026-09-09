@@ -2,12 +2,18 @@
 
 ## Overview
 
-This folder documents BAREWire: the typed contract between Clef components, and the declared authority on memory layout for every processor a program runs on. Two missions, ranked ([Substrate_Formalism](./Substrate_Formalism.md), "The two missions"):
+BAREWire supplies shared contract and representation glue for memory layout, IPC, and network communication. Declarations connect source meaning to the byte layout used by each participant. Type, schema, dimension, and proof metadata remain in PSG/codata until their compilation role is fulfilled; the final lowered payload is untagged with respect to that metadata. Application case indices, presence bits, and framing serve their declared encoding roles. [Substrate_Formalism](./Substrate_Formalism.md) explains the layers and the two missions:
 
-- **Primary.** A value crossing a BAREWire boundary between Clef components arrives with its case structure, payload types, and dimensional annotations intact, by construction and without tagging: the contract is a design-time fact, the bytes are its untagged image under a mapping both sides hold ([Substrate_Formalism](./Substrate_Formalism.md), "Three layers"); read inward, the same vocabulary declares each platform's memory spaces, buffer schemas, boundary surfaces, and transports for the compiler's three observers ([11](./11%20Platform%20Description.md)).
-- **Secondary.** The same contract binds to JavaScript, .NET, Rust, C, and C++: source-shared where one protocol file compiles under Fable, .NET, and Composer, schema-shared where a BARE schema is the interchange artifact.
+- **Primary.** Shared contracts between Clef components and platform declarations for memory spaces, buffers, boundary surfaces, and transports ([11 Platform Description](./11%20Platform%20Description.md)).
+- **Secondary.** Bind those contracts across JavaScript, .NET, Rust, C, and C++: source-shared where one protocol source can compile under the participating compilers, schema-shared where a BARE schema is the interchange artifact. Implementation coverage varies by pathway.
 
 The documents specify the system; [Implementation Status](./Implementation%20Status.md) says which parts are built; [Readiness Audit](./Readiness%20Audit.md) is the build plan; [12 Intersection Subset](./12%20Intersection%20Subset.md) is the compiler-facing rulebook the shared source follows and the gates that enforce it.
+
+## Compiler and editor integration
+
+[Composer's Lattice integration plan](https://github.com/FidelityFramework/Composer/blob/main/docs/Lattice_Integration.md) coordinates the planned .NET-hosted server, CCS projections, and editor acceptance gates. BAREWire supplies the declarations behind layout and boundary obligations. Lattice should present their compiler-owned results through standard LSP, alongside measured-type hover and diagnostics.
+
+The current code-owned [obligation definitions and projections](../src/Platform/Obligations.fs) produce declaration-derived obligations, solver input, and ledger records. The [JavaScript solver gate](../tests/js/tiers.mjs) exercises that projection; [Intersection Subset §5.1](./12%20Intersection%20Subset.md#51-what-the-javascript-solver-gate-establishes) distinguishes these declaration-model checks from implementation preservation. Live graph export to Lattice, proof-verdict delivery, and edit invalidation remain integration work. The external ledger remains a scaffold for reconciling graph and lowered-artifact evidence. No BAREWire binary LSP transport is supplied by this path.
 
 ## Table of Contents
 
@@ -43,6 +49,7 @@ The documents specify the system; [Implementation Status](./Implementation%20Sta
 11. [The Case from Practice](./10%20The%20Case%20from%20Practice.md)
 12. [Platform Description](./11%20Platform%20Description.md)
 13. [Intersection Subset](./12%20Intersection%20Subset.md)
+14. [Dispatch Regions](./13%20Dispatch%20Regions.md) — implemented spatial validators and byte guards, with the layout, access and lifetime contract extracted from HelloWayland for Ariel integration.
 
 ### Design references
 
@@ -86,7 +93,7 @@ ecosystem for the Clef language:
 BAREWire provides:
 
 1. **Memory Descriptors**: Type definitions for hardware memory mapping (see [Hardware Descriptors](./08%20Hardware%20Descriptors.md))
-2. **Zero-Copy IPC**: Efficient inter-process communication without data copying
+2. **IPC contracts**: Declared layouts and framing for shared-memory and messaging integration; OS-level IPC integration remains design work (see [Implementation Status](./Implementation%20Status.md))
 3. **Schema System**: Wire format definitions for serialization
 4. **Platform Description** *(direction)*: the declared authority on memory layout, boundary contracts, and transports for every processor — see [11 Platform Description](./11%20Platform%20Description.md)
 
@@ -94,10 +101,10 @@ BAREWire provides:
 
 | Project | Role | Documentation |
 |---------|------|---------------|
-| **Clef / CCS** | The language and its compiler services; the native type universe | `~/repos/clef`, `~/repos/clef-lang-spec` |
-| **Composer** | Native compilation pipeline (formerly Firefly) | `~/repos/Composer/docs/` |
-| **Farscape** | C/C++ binding generator (clang-based) | `~/repos/Farscape/docs/` |
-| **Fidelity.Platform** | Per-target platform source trees (CPU, FPGA) | `~/repos/Fidelity.Platform/` |
+| [Clef / CCS](https://github.com/FidelityFramework/clef) | The language and its compiler services; the native type universe | [Language specification](https://github.com/FidelityFramework/clef-lang-spec) |
+| [Composer](https://github.com/FidelityFramework/Composer) | Compilation pipeline and planned Lattice server host | [Lattice integration](https://github.com/FidelityFramework/Composer/blob/main/docs/Lattice_Integration.md) |
+| [Farscape](https://github.com/FidelityFramework/Farscape) | C/C++ binding generator (clang-based) | [Documentation](https://github.com/FidelityFramework/Farscape/tree/main/docs) |
+| [Fidelity.Platform](https://github.com/FidelityFramework/Fidelity.Platform) | Per-target platform source trees (CPU, FPGA) | [Platform description contract](./11%20Platform%20Description.md) |
 
 ## Getting Started
 

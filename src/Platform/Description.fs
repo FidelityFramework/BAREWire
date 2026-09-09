@@ -2,6 +2,14 @@ namespace BAREWire.Platform
 
 open BAREWire.Encoding
 
+/// The platform's C calling convention and its scalar aggregate register limit.
+/// Vector and other special ABI classes require separate classification.
+type CAbiDescriptor = {
+    Name: string
+    PointerBits: int
+    ScalarAggregateRegisterBytes: int
+}
+
 /// The platform description: the declared authority on memory layout,
 /// boundary surfaces, buffer capacities, and transports for one processor
 /// (docs/11). A Fidelity.Platform target tree is one `PlatformDescription`

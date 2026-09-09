@@ -8,5 +8,7 @@ let main _ =
     BAREWire.Tests.HardwareTests.run ()
     BAREWire.Tests.MemoryTests.run ()
     BAREWire.Tests.PlatformTests.run ()
+    BAREWire.Tests.StaticStorageTests.run ()
+    BAREWire.Tests.DispatchRegionTests.run ()
     BAREWire.Tests.TranscriptTests.run ()
     BAREWire.Tests.Harness.summary ()

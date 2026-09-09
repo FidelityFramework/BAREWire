@@ -1,0 +1,18 @@
+# Shared dispatch validation without the codec implementation.
+[package]
+name = "BAREWire.Dispatch"
+version = "0.2.0"
+
+[compilation]
+target = "library"
+
+[dependencies]
+metadata = { path = "BAREWire.PlatformMetadata.fidproj" }
+
+[build]
+output_kind = "library"
+sources = [
+    "Hardware/Abi.fs",
+    "Hardware/Validator.fs",
+    "Platform/DispatchRegions.fs"
+]

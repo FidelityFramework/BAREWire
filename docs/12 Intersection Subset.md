@@ -143,14 +143,102 @@ These hosted gates do not replace the native RoundTrip acceptance gate below.
 
 A `[compilation] target = "library"` compile demotes every type error in unreachable code to an informational message, so it is a weak check: a library with no entry point is all unreachable code. The gate that counts is a reachable program compiled to a native binary and run.
 
-| Gate | Command | What it proves |
+| Gate | Command | What it establishes |
 | --- | --- | --- |
 | Native | `Composer compile samples/RoundTrip/RoundTrip.fidproj` then run `targets/roundtrip` | Every shared tier lowers and runs on the Clef substrate; the sample's output is the golden transcript. **Status 2026-09-03:** passes on the rebuilt Composer (the Composer and clef working trees): the 27 transcript lines are identical to `expected.txt`. Blocked on the pinned snapshot by `array-length`, `generalization`, `recursive-union`, `record-arrays`, `string-constant`, `string-equality`, and `short-circuit`. The .NET and JavaScript gates are the must-pass gates; native is the acceptance gate on the rebuilt compiler until HelloProof re-snapshots it. `samples/RoundTrip/Main.clef` is the acceptance program; its stdout is diffed against `samples/RoundTrip/expected.txt`, which `tests/TranscriptTests.fs` produces and re-checks through the .NET build. |
 | .NET | `dotnet build src/BAREWire.fsproj` and `dotnet run --project tests/BAREWire.Tests.fsproj` | The tiers compile under .NET; the golden-frame corpus and the validator verdicts hold. |
-| JavaScript | `fable src/BAREWire.Fable.fsproj --outDir <dir>`, `echo '{"type":"module"}' > <dir>/package.json`, then `node tests/js/roundtrip.mjs <dir>` and `node tests/js/tiers.mjs <dir>` | All six tiers compile under Fable with the JavaScript shims; the emitted code produces the golden bytes, validates and emits a schema, derives and validates a layout, reads back its own BTF, and declares the Linux description whose obligations it hands to cvc5 (`unsat` on each). |
+| JavaScript | `fable src/BAREWire.Fable.fsproj --outDir <dir>`, `echo '{"type":"module"}' > <dir>/package.json`, then `node tests/js/roundtrip.mjs <dir>` and `node tests/js/tiers.mjs <dir>` | All six tiers compile under Fable with the JavaScript shims. The scripts check fixed codec vectors and selected schema, layout, BTF, memory-view, and platform cases. The JavaScript observer generates declaration-derived formulas and the Node harness dispatches them to cvc5, with both expected `unsat` and expected `sat` cases. See §5.1 for their scope. |
 | Dependency | `samples/RoundTrip/RoundTrip.fidproj` declares `barewire = { path = "../../src/BAREWire.fidproj" }` | Composer splices a dependency's sources in its declared order (Fidelity.Platform is consumed the same way), so the file order is validated by every consumer. A standalone `Composer compile src/BAREWire.fidproj` is not a gate: on this snapshot a `library` target has no platform context and refuses even `Cursor.fs` ("No platform context available from CCS"), and a `cpu` target with `output_kind = "library"` has no declaration root. |
 
 The differential gate of Readiness Audit §4 step 4 is the .NET test corpus checked against the native sample's transcript: the same values, the same bytes, on two substrates.
+
+### 5.1 What the JavaScript solver gate establishes
+
+**Rechecked 2026-09-07:** the existing JavaScript gates pass on fresh Fable
+output from BAREWire source commit `14e46f6d4023b630c4d4d0f6c773cea019f4d9bc`,
+using Fable 5.13.0, Fable.Core 5.2.0, Node 25.1.0, and cvc5 1.3.0.
+The codec and extended-tier scripts agree with their expected values. There are
+22 solver invocations: 15 expected `unsat` and 7 expected `sat`.
+
+The path is concrete: the compiled JavaScript implements
+`Obligations.ofDescription` and `smtLib`; `tests/js/tiers.mjs` supplies descriptions,
+writes the resulting SMT-LIB, and launches the external cvc5 executable through
+Node. The solver is part of this validation harness. This does not require a
+browser or a deployed Worker to launch cvc5 for each message.
+
+Each query asserts the negation of an obligation. `unsat` means no counterexample
+exists in that formula's domain under its premises; `sat` means the negation is
+satisfiable. The harness requires successful solver execution and the expected
+answer. It does not request a proof certificate for independent checking.
+
+| Exercised obligation | Stated invariant and domain | What the result establishes |
+| --- | --- | --- |
+| Buffer capacity, two Linux queries | `1024 > 0` and `1024 <= 4096`, in mathematical integers | The declared console buffer is positive and fits its declared arena capacity. This does not prove a total allocation budget for all buffers. |
+| Input bound, one query | `1024 <= 1024`, in mathematical integers | The model uses the same declared capacity for the reader's count and allocation. Establishing that the actual reader and allocation use it is a separate correspondence obligation. |
+| Trimmed-copy bound, one query | For every integer `r` with `1 <= r <= 1024`, `r - 1 <= 1023` | Every positive read length admitted by the model fits the trimmed-copy bound. The same premises imply a nonnegative copy length; this query does not cover EOF, errors, delimiter detection, or prove the external reader's contract. |
+| Alignment, two queries | Each based space declares alignment 4096; `a != 0` and `a & (a - 1) = 0` over 64-bit vectors | Those alignment declarations are powers of two. This does not establish that a runtime address is aligned or that a linker honors the declaration. |
+| Memory-map disjointness, one Linux query and fourteen regression queries | Every pair of declared half-open ranges is disjoint: `b_i + l_i <= b_j` or `b_j + l_j <= b_i`, in mathematical integers | The fixed declarations agree or overlap as expected. Regressions cover near-int64 limits, swapped ordering, and colliding names. Integer endpoint arithmetic avoids machine overflow in the model; actual placement and address representability remain separate premises. |
+| Minimum signed bound, one query | `-9223372036854775808 <= 0`, in mathematical integers | The observer preserves this exact signed constant when serializing SMT-LIB. |
+
+These are proofs of the generated formulas about the supplied declarations.
+cvc5 does not receive JavaScript source, bytecode, or a model of each executed
+load and store. In particular, it cannot detect a wrong offset in emitted
+JavaScript by re-solving an unchanged declaration formula. The description's
+`read` contract is explicitly assumed; the harness does not prove the operating
+system implementation behind it. Transport-unit and stack-limit obligation
+families exist in the observer and have .NET fixtures, but are not dispatched by
+this JavaScript script.
+
+The other checks in these scripts execute ordinary library code. The codec gate
+checks one mixed golden payload plus framing, wrapper, and failure cases; it
+does not quantify over every encodable value or run another compiler alongside
+Node. The tier gate exercises layout and schema overflow rejection, field access
+rights, invalid regions, exact decimal comparisons, and manifest sensitivity.
+These regressions complement the solver checks rather than becoming solver
+proofs themselves.
+
+The host numeric choices matter to both halves. The Fable build represents
+int64/uint64 values and capacities with `BigInt`; descriptor offsets and lengths
+use Number-backed F# `int`, with checked extent arithmetic rejecting answers that
+cannot be represented by that hosted descriptor. For example, a fixed byte extent
+of 2147483647 is accepted, while a 4 GiB derived layout is rejected. This is an
+implementation bound, not a source-level Clef width rule. Representation range
+bounds use exact decimal-text comparison, so `9007199254740993` is not rounded to
+`9007199254740992`. Floating bit casts use `DataView`. These choices preserve the
+tested values; arbitrary foreign callers still need their argument domains
+established at the boundary.
+
+### 5.2 Carrying the result toward a JavaScript target
+
+BAREWire supplies the shared declarations from which the compiler can derive
+obligations. The proposed JSIR pathway must also connect those obligations to
+the operations that implement them. For a four-byte field, that means relating
+the declared offset and representation to the actual writes, establishing the
+buffer extent and ownership premises, and preserving the byte order and numeric
+value through JavaScript's operation semantics. Shared source or shared IR makes
+that relationship easier to state; it does not establish it automatically.
+
+The intended proof state resides in the PSG's joint constraint mechanism. It
+retains the subject, dimensional and representation facts, assumptions, and
+discharge evidence until affected lowering steps preserve or re-check them.
+Metadata can then be released at the appropriate final lowering boundary; the
+BAREWire payload remains untagged. Build evidence need not travel in the payload.
+The external ledger remains the scaffold used to check the graph's integrity.
+
+An acceptance gate for that pathway needs to identify the declaration, the source
+operation, the target operation or checked lowering rule, and the resulting
+artifact for each claimed property. Source, compiler, declaration, and artifact
+identities make the evidence reproducible; hashes alone do not establish semantic
+correspondence. The present scripts accept an output directory and do not supply
+that evidence chain. Their passing result is the current hosted foundation for
+this work, not a completed JSIR preservation claim.
+
+The same principle permits range, dimensional, or state-transition proofs about
+Clef computations between boundaries. BAREWire's role is central to composing
+those facts across memory, IPC, and network crossings. It neither limits all
+JavaScript-target proofs to serialization nor certifies foreign JavaScript from
+its TypeScript declarations. See [Substrate Formalism](./Substrate_Formalism.md#the-current-javascript-evidence-and-the-next-link)
+and the [JavaScript boundary specification](../../clef-lang-spec/spec/javascript-boundary.md).
 
 ## 6. Evidence trail
 

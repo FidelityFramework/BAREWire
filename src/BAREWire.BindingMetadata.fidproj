@@ -1,0 +1,13 @@
+# Minimal declaration vocabulary for generated native bindings.
+# The full BAREWire project remains the codec/runtime package.
+[package]
+name = "BAREWire.BindingMetadata"
+version = "0.2.0"
+[compilation]
+target = "library"
+[build]
+output_kind = "library"
+sources = [
+    "Hardware/Descriptors.fs",
+    "Descriptors/Bindings.fs"
+]

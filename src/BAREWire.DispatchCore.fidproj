@@ -1,0 +1,11 @@
+# Allocation-free Clef projection of the hosted scalar dispatch guards.
+[package]
+name = "BAREWire.DispatchCore"
+version = "0.2.0"
+
+[compilation]
+target = "library"
+
+[build]
+output_kind = "library"
+sources = ["Platform/DispatchRegions.Clef.fs"]

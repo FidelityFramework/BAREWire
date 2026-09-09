@@ -35,6 +35,8 @@ type TypeRef =
 type PassBy =
     | Value
     | Reference
+    /// The callee may read the referenced storage but must not mutate it.
+    | ReadOnlyReference
 
 /// The calling convention the C side expects.
 type CallConv =
@@ -66,6 +68,59 @@ type FunctionDescriptor = {
     OwnershipTransfer: Transfer
 }
 
+/// A generated listener field's native calling contract. The record and field
+/// identify each FnPtr supplied by application code; the signature fixes its
+/// C parameter and result representations independently of the Clef carrier.
+type CallbackDescriptor = {
+    Record: string
+    Field: string
+    Signature: FunctionDescriptor
+}
+
+/// A borrowed view's element representation. Schema names the opaque phantom
+/// marker, not a C struct; its element width never changes ordinary Clef arrays.
+type ViewLayoutDescriptor = {
+    Schema: string
+    Element: BAREWire.Hardware.Repr
+    Alignment: int
+    Access: BAREWire.Hardware.AccessKind
+}
+
+/// Values carried by one native acquisition. Output names a single declared
+/// reference cell written by that call, including a nullable opaque cookie.
+type MappedValue =
+    | Input of string
+    | Output of string
+
+/// A generated scoped wrapper over an existing native map/unmap pair. Native
+/// FunctionDescriptors retain their exact arities. The compiler owns output
+/// cells, validates stride/extent/alignment, invokes the callback with a borrowed
+/// view, and releases once after every callback use has retired. Failed native
+/// acquisition never invokes the callback or the release binding.
+type MappedReturnDescriptor = {
+    Binding: string
+    Acquire: string
+    Release: string
+    Layout: string
+    CallbackParameter: string
+    Owner: MappedValue
+    RowStride: MappedValue
+    RowCount: MappedValue
+    RowWidth: MappedValue
+    ReleaseArguments: MappedValue array
+    FailureStatus: int
+}
+
+/// The binding promises that every use and capture of this callback retires
+/// before it returns. This declaration is a trusted library obligation. The
+/// compiler checks callers' scoped uses against that promise; it does not prove
+/// an arbitrary scheduling implementation honors it. Native lifecycle tests
+/// and implementation review supply separate retirement evidence.
+type ScopedCallbackDescriptor = {
+    Binding: string
+    Parameter: string
+}
+
 /// Parameter constructors.
 module Parameter =
 
@@ -76,6 +131,10 @@ module Parameter =
     /// A parameter passed by reference.
     let reference (name: string) (t: TypeRef) : ParameterInfo =
         { Name = name; Type = t; PassBy = Reference }
+
+    /// A reference whose foreign contract excludes writes through this parameter.
+    let readOnlyReference (name: string) (t: TypeRef) : ParameterInfo =
+        { Name = name; Type = t; PassBy = ReadOnlyReference }
 
 /// Function descriptor constructors. A descriptor is a declaration the compiler
 /// reads (CCS8206 for a shape it cannot follow, CCS8207 for a width of no bits);

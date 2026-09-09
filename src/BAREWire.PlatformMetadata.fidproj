@@ -1,0 +1,19 @@
+# Declaration vocabulary for compiler platform discovery without the codec,
+# validators, memory operations and other executable BAREWire libraries.
+[package]
+name = "BAREWire.PlatformMetadata"
+version = "0.2.0"
+[compilation]
+target = "library"
+[dependencies]
+bindings = { path = "BAREWire.BindingMetadata.fidproj" }
+[build]
+output_kind = "library"
+sources = [
+    "Encoding/Cursor.fs",
+    "Encoding/Substrate/Text.Clef.fs",
+    "Encoding/Fmt.fs",
+    "Platform/Tags.fs",
+    "Platform/Description.fs",
+    "Platform/Schema.fs"
+]

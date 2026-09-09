@@ -21,6 +21,8 @@
     <Compile Include="HardwareTests.fs" />
     <Compile Include="MemoryTests.fs" />
     <Compile Include="PlatformTests.fs" />
+    <Compile Include="StaticStorageTests.fs" />
+    <Compile Include="DispatchRegionTests.fs" />
     <Compile Include="TranscriptTests.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

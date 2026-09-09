@@ -54,6 +54,8 @@ sources = [
     # Platform: the description and its three observers (docs/11)
     "Platform/Tags.fs",
     "Platform/Description.fs",
+    "Platform/StaticStorage.fs",
+    "Platform/DispatchRegions.fs",
     "Platform/DecimalText.fs",
     "Platform/Check.fs",
     "Platform/Manifest.fs",
