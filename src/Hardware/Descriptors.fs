@@ -184,10 +184,20 @@ type XtensaImageDescriptor = {
     Sram0Space: string
     /// The dual-mapped bank, named by its instruction-bus space. Owns capacity.
     Sram1Space: string
-    /// The same bank's data-bus alias. Carries no capacity of its own.
-    Sram1DataSpace: string
+    /// The same bank's base on the DATA bus. A dual-mapped bank is one space
+    /// with two bases, not two spaces: declaring an alias space with zero
+    /// capacity is rejected by the platform checker, and one with capacity
+    /// double-counts the silicon.
+    Sram1DataBase: int64
     /// Data-bus-only SRAM bank.
     Sram2Space: string
+    /// First data-bus address the image leaves alone. The ROM loader hands
+    /// over with its own memory still live above this line -- its buffers,
+    /// stacks and .data/.bss at the top of the shared bank -- and with the
+    /// data cache it enabled on the flash-boot path still holding the upper
+    /// half of the data-only bank. Memory the CPU cannot address is not
+    /// memory: a stack placed above this line is dead on its first store.
+    DataLimit: int64
     /// The flash part, addressed by offset. The ROM loader reads offset 0.
     FlashStoreSpace: string
     /// Bytes of the dual-mapped bank assigned to the instruction side. The
@@ -207,8 +217,10 @@ type XtensaImageDescriptor = {
     SpiMode: int
     SpiSpeed: int
     SpiSize: int
-    /// Append a SHA-256 for corruption detection. Not secure boot.
-    HashAppended: bool
+    /// 1 to append a SHA-256 for corruption detection; 0 otherwise. An int
+    /// rather than a bool because descriptor fields are read structurally from
+    /// the PSG as integers and strings, as CortexMImageDescriptor's are.
+    HashAppended: int
 }
 
 /// Facts about memory region kinds (docs/08 table).
