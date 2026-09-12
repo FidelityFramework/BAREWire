@@ -162,6 +162,55 @@ type CortexMImageDescriptor = {
     PreservedOptionBytes: int
 }
 
+/// Declarative Xtensa LX7 image placement for a ROM-loaded ESP32-S3 image.
+/// Startup, the vector block and every peripheral initialization belong to the
+/// project, not this map.
+///
+/// This is a sibling of CortexMImageDescriptor rather than a generalization of
+/// it, because three facts about this target have no Cortex-M analogue:
+///
+///  1. There is no flash at address 0 to execute from. The mask ROM loads
+///     segments into SRAM and jumps; FlashStoreSpace is a download target
+///     addressed by offset, not a mapped space.
+///  2. The SRAM is three banks, and the middle one is visible from BOTH CPU
+///     buses at different addresses. Sram1InstructionBytes partitions that
+///     bank: whatever the instruction side takes, the data side cannot have.
+///     Without an explicit split, a linker script that fills IRAM from the
+///     bottom and DRAM from the bottom writes both into the same silicon.
+///  3. The vector block is 1024 bytes of code at a relocatable VECBASE, not an
+///     array of handler addresses.
+type XtensaImageDescriptor = {
+    /// Instruction-bus-only SRAM bank.
+    Sram0Space: string
+    /// The dual-mapped bank, named by its instruction-bus space. Owns capacity.
+    Sram1Space: string
+    /// The same bank's data-bus alias. Carries no capacity of its own.
+    Sram1DataSpace: string
+    /// Data-bus-only SRAM bank.
+    Sram2Space: string
+    /// The flash part, addressed by offset. The ROM loader reads offset 0.
+    FlashStoreSpace: string
+    /// Bytes of the dual-mapped bank assigned to the instruction side. The
+    /// data side receives the remainder. Both sides addressing one byte is a
+    /// declaration error, not a placement to resolve later.
+    Sram1InstructionBytes: int
+    VectorLayout: string
+    /// VECBASE ignores its low bits; 1024 on this core.
+    VectorAlignment: int
+    StackBytes: int
+    EntrySymbol: string
+    PartNumber: string
+    /// esp_image_header_t fields the mask ROM reads before anything runs.
+    ChipId: int
+    MinChipRevFull: int
+    MaxChipRevFull: int
+    SpiMode: int
+    SpiSpeed: int
+    SpiSize: int
+    /// Append a SHA-256 for corruption detection. Not secure boot.
+    HashAppended: bool
+}
+
 /// Facts about memory region kinds (docs/08 table).
 module MemoryRegion =
 

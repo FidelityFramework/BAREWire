@@ -27,7 +27,7 @@ Alex emission: direct calls                     (func.call @write, ...)
 Each layer is source or compiler analysis; none is runtime machinery — and BAREWire appears nowhere in this chain, which is the point: everything BAREWire adds sits above it, as contract and layout. The platform surface is ordinary Clef code in the per-target tree — `Console.write` calls `Sys.write STDOUT s`, and the binding-resolution coeffect maps the intrinsic to the target symbol and calling convention for the declared platform. The emitted program contains direct calls with the memref-to-pointer/length conversion at the boundary; there is no marshaling layer because there is no runtime type system to marshal across.
 
 ```fsharp
-// Fidelity.Platform/CPU/Linux/x86_64/Console.clef — the platform surface is source
+// Fidelity.Platform/Environments/Linux/x86_64/Console.clef — the platform surface is source
 [<Literal>]
 let STDIN = 0
 
