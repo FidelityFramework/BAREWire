@@ -51,6 +51,8 @@ The current code-owned [obligation definitions and projections](../src/Platform/
 13. [Intersection Subset](./12%20Intersection%20Subset.md)
 14. [Dispatch Regions](./13%20Dispatch%20Regions.md) — implemented spatial validators and byte guards, with the layout, access and lifetime contract extracted from HelloWayland for Ariel integration.
 
+- [Native Callback Descriptors](./Native_Callback_Descriptors.md) — complete native listener signatures and binding-owned adapters for closed module handlers.
+
 ### Design references
 
 - [Arena Design](./Arena_Design.md) — authoritative design; implemented

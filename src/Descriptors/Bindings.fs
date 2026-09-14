@@ -77,6 +77,19 @@ type CallbackDescriptor = {
     Signature: FunctionDescriptor
 }
 
+/// A binding-owned adapter for a closed application handler. Binding names a
+/// one-argument factory returning the native listener record. Adapter names a
+/// module function taking that handler followed by the native entry arguments.
+/// The compiler specializes it to a named module handler without captures;
+/// no closure environment is retained. CallbackDescriptor still declares the
+/// record field's complete C ABI. These names are fully qualified bindings.
+type ClosedCallbackDescriptor = {
+    Binding: string
+    Adapter: string
+    Record: string
+    Field: string
+}
+
 /// A borrowed view's element representation. Schema names the opaque phantom
 /// marker, not a C struct; its element width never changes ordinary Clef arrays.
 type ViewLayoutDescriptor = {
