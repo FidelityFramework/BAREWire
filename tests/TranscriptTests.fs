@@ -98,7 +98,7 @@ let transcript () : string array =
     let buffers = [| BufferSchema.delimited "consoleReadln" "str" 1024L 10 true "arena" |]
     let desc : PlatformDescription =
         { Id = "cpu-linux-x86_64"; DisplayName = "Linux x86-64 (libc)"; Substrate = "CPU"; Core = None
-          Spaces = spaces; Surfaces = surfaces; Buffers = buffers; Transports = [||]
+          Spaces = spaces; ProgramLifetime = None; Surfaces = surfaces; Buffers = buffers; Transports = [||]
           Lifecycle = Lifecycle.process' "_start" "exit_group" Persistence.Volatile; Notes = [||]; Limits = [||] }
     show "findings" (Array.length (Check.run desc))
     let obs = Obligations.ofDescription desc

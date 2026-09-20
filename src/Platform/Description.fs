@@ -211,6 +211,15 @@ type Limit = {
     Value: int64
 }
 
+/// Named authority for program-lifetime storage. These names reference Spaces;
+/// they do not infer placement from a space's kind or duplicate its budget.
+/// Immutable denotes an immutable image, not permission to initialize a source
+/// immutable binding by writing into read-only memory at runtime.
+type ProgramLifetimeSpaces = {
+    Immutable: string
+    Mutable: string option
+}
+
 /// The whole description of one processor: identity, the core's ISA facts
 /// when it has a core, and the declared spaces, surfaces, buffers, transports,
 /// lifecycle, and limits the three observers read.
@@ -220,6 +229,9 @@ type PlatformDescription = {
     Substrate: string
     Core: TargetCore option
     Spaces: MemorySpace array
+    /// None supplies no program-lifetime storage authority. Consumers requiring
+    /// that storage must reject absence; they must not select a space by name.
+    ProgramLifetime: ProgramLifetimeSpaces option
     Surfaces: BoundarySurface array
     Buffers: BufferSchema array
     Transports: Transport array

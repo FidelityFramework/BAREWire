@@ -55,6 +55,8 @@ module FindingKind =
     let InvalidRange: string = "invalid-range"
     [<Literal>]
     let WidthMismatch: string = "width-mismatch"
+    [<Literal>]
+    let InvalidProgramLifetimeAccess: string = "invalid-program-lifetime-access"
 
 /// The consistency check on a description (docs/11): every tag is one the
 /// vocabulary names, every name reference resolves, capacities are positive
@@ -197,6 +199,29 @@ module Check =
             else acc9
         if Availability.wellFormed s.Since s.Until then acc10
         else push acc10 (finding s.Name FindingKind.InvalidAvailability (Text.append (Text.append "available since " s.Since) (Text.append " until " s.Until)))
+
+    let private checkProgramLifetime (acc: Finding array) (desc: PlatformDescription) : Finding array =
+        let checkReference out role name immutable =
+            let subject = Text.append "program-lifetime." role
+            let named = checkName out subject name
+            match PlatformDescription.tryFindSpace desc name with
+            | None when name <> "" ->
+                push named (finding subject FindingKind.UnknownSpace (Text.append "program-lifetime space is not declared: " name))
+            | None -> named
+            | Some space ->
+                let permitted =
+                    if immutable then space.Access = Access.ReadOnly || space.Access = Access.ReadExecute
+                    else space.Access = Access.ReadWrite
+                if permitted then named
+                else push named (finding subject FindingKind.InvalidProgramLifetimeAccess
+                                    (Text.append "program-lifetime role is incompatible with the declared access of " name))
+        match desc.ProgramLifetime with
+        | None -> acc
+        | Some roles ->
+            let immutable = checkReference acc "immutable" roles.Immutable true
+            match roles.Mutable with
+            | None -> immutable
+            | Some name -> checkReference immutable "mutable" name false
 
     /// Two spaces with declared bases overlap when their ranges intersect.
     let private overlaps (a: MemorySpace) (b: MemorySpace) : bool =
@@ -477,6 +502,7 @@ module Check =
             acc <- checkSpace acc desc.Spaces i
             i <- i + 1
         acc <- checkOverlaps acc desc.Spaces
+        acc <- checkProgramLifetime acc desc
         let nb = Array.length desc.Buffers
         let mutable j = 0
         while j < nb do

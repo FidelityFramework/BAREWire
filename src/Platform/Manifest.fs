@@ -187,6 +187,11 @@ module Manifest =
         while i < ns do
             out <- line out (spaceLine (Array.get desc.Spaces i))
             i <- i + 1
+        match desc.ProgramLifetime with
+        | None -> out <- line out "program-lifetime unavailable"
+        | Some roles ->
+            let mutableName = match roles.Mutable with Some name -> name | None -> "none"
+            out <- line out (sp (sp "program-lifetime" (kv "immutable" roles.Immutable)) (kv "mutable" mutableName))
         let nb = Array.length desc.Buffers
         let mutable j = 0
         while j < nb do

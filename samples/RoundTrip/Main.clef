@@ -121,7 +121,7 @@ let main argv =
     let buffers = [| BufferSchema.delimited "consoleReadln" "str" 1024L 10 true "arena" |]
     let desc : PlatformDescription =
         { Id = "cpu-linux-x86_64"; DisplayName = "Linux x86-64 (libc)"; Substrate = "CPU"; Core = None
-          Spaces = spaces; Surfaces = surfaces; Buffers = buffers; Transports = Array.zeroCreate 0
+          Spaces = spaces; ProgramLifetime = None; Surfaces = surfaces; Buffers = buffers; Transports = Array.zeroCreate 0
           Lifecycle = Lifecycle.process' "_start" "exit_group" Persistence.Volatile
           Notes = Array.zeroCreate 0; Limits = Array.zeroCreate 0 }
     show "findings" (Array.length (Check.run desc))

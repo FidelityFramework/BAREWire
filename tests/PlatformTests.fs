@@ -36,6 +36,7 @@ let run () =
                             Representation.unsignedInt "uint8" 8 "255"
                             Representation.ieee "float64" 64 "179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368"
                             Representation.posit "posit32" Capability.Emulated 32 "1329227995784915872903807060280344576" |])
+          ProgramLifetime = Some { Immutable = "rodata"; Mutable = Some "data" }
           Spaces = [|
             MemorySpace.withAccess (MemorySpace.withBase (MemorySpace.create "text" MemoryKind.Text 4096L 4096) 0x401000L) Access.ReadExecute
             MemorySpace.withAccess (MemorySpace.withBase (MemorySpace.create "rodata" MemoryKind.Rodata 4096L 4096) 0x402000L) Access.ReadOnly
@@ -49,6 +50,30 @@ let run () =
           Notes = [| "bases are those of a non-PIE static ELF" |]
           Limits = [||] }
     equal "linux description consistent" 0 (Array.length (Check.run linux))
+    let unavailable = { linux with ProgramLifetime = None }
+    equal "unavailable program storage does not infer a designation" None unavailable.ProgramLifetime
+    let immutableOnly = { linux with ProgramLifetime = Some { Immutable = "rodata"; Mutable = None } }
+    equal "immutable-only program storage is consistent" 0 (Check.run immutableOnly).Length
+    let withRoles immutable mutableName =
+        { linux with ProgramLifetime = Some { Immutable = immutable; Mutable = mutableName } }
+    for name, desc, kind in
+        [ "unknown immutable space", withRoles "missing" None, FindingKind.UnknownSpace
+          "unknown mutable space", withRoles "rodata" (Some "missing"), FindingKind.UnknownSpace
+          "empty immutable name", withRoles "" None, FindingKind.EmptyName
+          "empty mutable name", withRoles "rodata" (Some ""), FindingKind.EmptyName
+          "writable immutable image", withRoles "data" None, FindingKind.InvalidProgramLifetimeAccess
+          "read-only mutable storage", withRoles "rodata" (Some "rodata"), FindingKind.InvalidProgramLifetimeAccess ] do
+        let findings = Check.run desc
+        equal name 1 findings.Length
+        equal (name + " kind") kind findings.[0].Kind
+    let renamed =
+        { linux with
+            Spaces = linux.Spaces |> Array.map (fun space -> if space.Name = "rodata" then { space with Name = "constant-image" } else space)
+            ProgramLifetime = Some { Immutable = "constant-image"; Mutable = Some "data" } }
+    equal "program storage follows declaration names rather than conventional spelling" 0 (Check.run renamed).Length
+    check "manifest preserves program storage names" ((Manifest.emit renamed).Contains "program-lifetime immutable=constant-image mutable=data") (Manifest.emit renamed)
+    check "manifest preserves unavailable program storage" ((Manifest.emit unavailable).Contains "program-lifetime unavailable") (Manifest.emit unavailable)
+    check "manifest preserves absent mutable storage" ((Manifest.emit immutableOnly).Contains "program-lifetime immutable=rodata mutable=none") (Manifest.emit immutableOnly)
     // The core's declarations (plan D8): each width and representation named once, tags from the
     // vocabulary, the Register width agreeing with the word size.
     let withCore (core: TargetCore) : PlatformDescription = { linux with Core = Some core }
@@ -122,6 +147,7 @@ let run () =
             Endpoint.hook "lsm" "lsm_ctx -> errno" "5.7" |]
     let kernel : PlatformDescription =
         { Id = "bpf-linux-6.x"; DisplayName = "Linux kernel 6.x, eBPF surface"; Substrate = "Kernel"; Core = None
+          ProgramLifetime = None
           Spaces = [|
             MemorySpace.create "stack" MemoryKind.Stack 512L 8
             MemorySpace.map "counters" MapKind.PerCpuArray 4096L 8
@@ -178,6 +204,7 @@ let run () =
     // endpoint cannot be materialized in a signed host integer.
     let mapping firstName a ac secondName b bc =
         { linux with
+            ProgramLifetime = None
             Spaces = [| MemorySpace.withBase (MemorySpace.create firstName MemoryKind.Rodata ac 1) a
                         MemorySpace.withBase (MemorySpace.create secondName MemoryKind.Rodata bc 1) b |]
             Buffers = [||]; Surfaces = [||]; Transports = [||] }
@@ -225,6 +252,7 @@ let run () =
     equal "frame is pointer-free" true (Layout.isPointerFree frame.Layout)
     let l2 : PlatformDescription =
         { Id = "threebody-host"; DisplayName = "Strix Halo host, Arty A7 sidecar over Layer 2"; Substrate = "CPU"; Core = None
+          ProgramLifetime = None
           Spaces = [| MemorySpace.create "umem" MemoryKind.Ring 4194304L 4096 |]
           Surfaces = [| BoundarySurface.create "nic" SurfaceKind.HostApi [| Endpoint.create "eth0" EndpointKind.Symbol "af_xdp" [||] |] |]
           Buffers = [| BufferSchema.fixed' "closeEncounter" "CloseEncounterFrame" (int64 frame.Layout.Size) "umem" |]
