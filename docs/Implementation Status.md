@@ -23,6 +23,28 @@ Assessed 2026-09-03 against `src/`, after the rebuild the [Readiness Audit](./Re
 
 ## What lands next (Readiness Audit §4)
 
+### Target-aware compiler handoff — planned 2026-09-20
+
+[Composer M-01](../../Composer/docs/PRDs/M-01-DialectAdmission.md) coordinates
+operation/profile admission under the existing clef-lang-spec numeric, memory
+and scheduler contracts. BAREWire's part is to preserve agreed layout, bounds,
+ownership, publication, transfer and lifecycle facts through Baker's graph and
+the selected backend handoff. Spatial validation alone does not establish safe
+publication, retirement, wait ordering or scheduler progress.
+
+For parallel numerical work, transported partial state must preserve the
+[arithmetic construction](../../clef-lang-spec/spec/numeric-selection.md#103-arithmetic-construction-contracts):
+rounding a partial before an exact merge requires an exactness proof. Planned
+oracles cover capacity, partial-state fidelity, contribution identity/multiplicity
+and lifetime across native and JavaScript boundaries. Zero-copy is admitted only
+under the actual storage/transport contract. Compiler proof metadata stays in
+the graph/correspondence carriers; this plan does not add runtime type tags or
+proof packages to every payload. Any missing shared declaration/schema is
+coordinated with Fidelity.Platform and CCS before Alex consumes it. No new
+transport implementation or native gate is claimed by this planning update.
+
+### Earlier readiness items
+
 - Step 11 (landed 2026-09-03 in the Fidelity.Platform working tree): `Fidelity.Platform/Environments/Linux/x86_64/Description.clef`, with `consoleReadln` declaring the capacity `Console.clef` names once as `READLINE_CAPACITY`; the Arty A7 gains `ArtyA7_100T.Description.clef` and a rebase plan for its contracts.
 - Steps 10 and 13: the platform description as a coeffect of the program semantic graph, the `memory_map.manifest` residual, and obligations stated against the declaration in both dispatches (`06b` for cvc5 at design time, `09` in the `smt` dialect for cvc5 at build time), replacing the `1024L` literals in `pSysReadline`. Not built: an attempt that minted them in a pass beside the graph was withdrawn on 2026-09-03. The corpus places obligations in the graph itself (Composer `docs/Obligation_Residency_Design.md`), so this waits on the graph carrying its annotations and edges.
 - The compiler lane (landed 2026-09-03 in the Composer and clef working trees): the surface gaps in 12 closed with regression samples 18 through 23 in Composer's manifest; `samples/RoundTrip` runs natively and its transcript joins the differential. HelloProof's snapshot of that compiler is the remaining step; the `SUBSET(...)` sites migrate to their preferred spellings after it.
