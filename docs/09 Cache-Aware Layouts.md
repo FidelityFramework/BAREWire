@@ -2,11 +2,11 @@
 
 > **Status (2026-09-03).** Natural alignment (Rules 2 and 3) is built: `src/Hardware/Abi.fs` carries each ABI's alignment facts and `Validator.derive` lays a struct out by them, padding included, which is the layout a `View` reads through. Cache-line size, the `[<CacheLineAligned>]` attribute, false-sharing analysis, and the DWARF annotations remain design; the natural home for the cache-line fact is a field on `AbiProfile` beside `MaxAlign`, resolved from the target the way the profile's other facts are.
 
-BAREWire's deterministic layout system enables compile-time analysis of cache behavior. This document specifies how BAREWire ensures cache-friendly memory layouts and prevents common cache pathologies.
+BAREWire's deterministic layout system supplies inputs for compile-time analysis of cache behavior. This document specifies the layout, allocation and target evidence needed to reduce avoidable cache traffic. Known offsets alone do not establish cache residency or a performance improvement.
 
 ## Architectural Context
 
-BAREWire controls memory layout at compile time. This is not merely an implementation detail; it is the foundation of Fidelity's cache behavior guarantees:
+BAREWire controls declared memory layout at compile time. Those facts constrain Fidelity's cache analysis:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -28,20 +28,13 @@ BAREWire controls memory layout at compile time. This is not merely an implement
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-Because BAREWire determines layout before code generation, cache behavior is analyzable at compile time.
+Because BAREWire determines layout before code generation, the compiler can analyze conditional footprints and separation requirements. Allocation addresses, access order, target topology and competing traffic determine how those layouts behave at runtime. Foreign ABI and wire layouts remain binding constraints on any transformation.
 
 ## Cache Line Fundamentals
 
 ### Hardware Cache Lines
 
-Modern processors operate on cache lines, not individual bytes:
-
-| Architecture | L1 Cache Line | L2 Cache Line | L3 Cache Line |
-|--------------|---------------|---------------|---------------|
-| x86-64 (Intel/AMD) | 64 bytes | 64 bytes | 64 bytes |
-| ARM Cortex-A (most) | 64 bytes | 64 bytes | 64 bytes |
-| ARM Cortex-M (embedded) | 32 bytes | 32 bytes | N/A |
-| Apple Silicon | 128 bytes | 128 bytes | 128 bytes |
+Cached processors transfer and coordinate data at hardware-defined granularities. The platform description must supply the relevant line size and sharing domains for the selected CPU and deployment. An architecture name or target triple is insufficient to infer the entire hierarchy; some supported targets have no data cache. The examples below explicitly assume 64-byte lines unless stated otherwise.
 
 ### The False Sharing Problem
 
@@ -76,7 +69,7 @@ BAREWire schemas carry target cache line size:
 ```fsharp
 type LayoutConfig = {
     /// Target cache line size in bytes
-    /// Default: 64 for x86-64/ARM64, 128 for Apple Silicon
+    /// Supplied by the selected CPU/platform contract; no universal default
     CacheLineSize: int
 
     /// Minimum alignment for cache-sensitive types
@@ -87,7 +80,7 @@ type LayoutConfig = {
 }
 ```
 
-This is resolved from the target triple at compile time.
+The analysis resolves this from the selected CPU/platform contract or a supported runtime discovery contract. Unknown geometry remains unknown: it cannot support a cache-separation guarantee. Natural ABI alignment is a separate fact.
 
 ### Rule 2: Natural Alignment Preservation
 
@@ -119,7 +112,7 @@ type Example = {
     c: byte      // 1 byte
 }
 
-// BAREWire layout (18 bytes total, 8-byte aligned)
+// BAREWire layout (24 bytes total, 8-byte aligned)
 Offset  Size  Member
 ------  ----  ------
 0       1     a
@@ -172,12 +165,13 @@ No two workers share a cache line.
 
 ### False Sharing Detection
 
-BAREWire analyzes struct layouts for potential false sharing:
+False-sharing analysis combines struct layouts with allocation and access evidence:
 
 ```
 Analysis Input:
   - Struct definition with mutable fields
   - Target cache line size
+  - Allocation base alignment, extents and array stride
   - Usage context (shared vs. thread-local)
 
 Analysis Output:
@@ -186,17 +180,17 @@ Analysis Output:
   - Suggested remediation
 ```
 
-Example warning:
+An informational report can expose a conditional risk without claiming a measured slowdown. The following is report wording, not a reserved diagnostic identifier:
 
 ```
-Warning FS9001: Potential false sharing in type 'SharedCounters'
-  Fields 'counter_a' and 'counter_b' are both mutable and
-  occupy the same cache line (offsets 0 and 8, line size 64).
+Info: Fields 'counter_a' and 'counter_b' occupy the same line
+  for this 64-byte-aligned allocation (offsets 0 and 8, line size 64).
+  If different cores access them concurrently and at least one writes,
+  this placement can cause false sharing.
 
-  If these fields are accessed from different threads, consider:
-  - Adding [<CacheLineAligned>] attribute
-  - Separating into distinct types
-  - Using per-thread arenas
+  Separate the independently written fields at the declared line granularity
+  if the access pattern warrants the added space. Aligning the whole record
+  alone does not separate fields within it.
 ```
 
 ### Cache Line Crossing Detection
@@ -215,22 +209,22 @@ type LargeValue = {
     h: int64   // 8 bytes
     i: int64   // 8 bytes
 }
-// 72 bytes - spans 2 cache lines
+// 72 bytes - spans 2 lines with a 64-byte-aligned base
 ```
 
-BAREWire reports:
+An appropriate layout report states the allocation assumption:
 
 ```
-Info FS9002: Type 'LargeValue' (72 bytes) spans 2 cache lines.
-  For hot-path access, consider splitting into cache-line-sized chunks
-  or ensuring alignment with [<CacheLineAligned>].
+Info: Type 'LargeValue' (72 bytes) spans 2 lines at a 64-byte-aligned base.
+  This describes the layout footprint, not measured traffic or residency.
+  Splitting the value is useful only if its access pattern and ABI permit it.
 ```
 
 ## Arena Integration
 
 ### Per-Arena Cache Isolation
 
-Arenas provide natural cache isolation:
+Arenas establish ownership regions. Physical separation additionally requires aligned bases and extents rounded to the relevant line granularity, maintained through allocation reuse:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -241,21 +235,22 @@ Arenas provide natural cache isolation:
 │  │ TempData     │                 │ TempData     │                     │
 │  ──────────────────                ──────────────────                   │
 │                                                                         │
-│  Arenas are allocated with cache-line-aligned base addresses.           │
-│  Inter-arena false sharing is structurally impossible.                  │
+│  Bases and extents must satisfy the declared line separation.           │
+│  Queues and allocator metadata require separate analysis.               │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Arena Allocation Alignment
 
-Arena allocations respect cache alignment:
+The allocation policy must honor alignment and rounded extent together. Aligning an offset is sufficient only when the arena base satisfies the same alignment. Bounds and overflow checks remain allocator obligations:
 
 ```fsharp
 // Arena allocator respects cache line boundaries
 let alloc<'T when 'T :> ICacheLineAligned> (arena: Arena) : Ptr<'T> =
     // Align to cache line boundary
     let alignedOffset = alignUp arena.CurrentOffset CacheLineSize
-    arena.CurrentOffset <- alignedOffset + sizeof<'T>
+    let reservedBytes = alignUp sizeof<'T> CacheLineSize
+    arena.CurrentOffset <- alignedOffset + reservedBytes
     Ptr.ofOffset arena.Base alignedOffset
 ```
 
@@ -290,19 +285,9 @@ let workerSchema =
 
 ## Platform-Specific Behavior
 
-### Target Triple Resolution
+### Target Fact Resolution
 
-Cache line size is resolved from the target:
-
-```fsharp
-let getCacheLineSize (target: TargetTriple) =
-    match target.Architecture, target.Vendor with
-    | "aarch64", "apple" -> 128   // Apple Silicon
-    | "aarch64", _ -> 64          // Other ARM64
-    | "x86_64", _ -> 64           // x86-64
-    | "arm", _ -> 32              // ARM Cortex-M
-    | _ -> 64                     // Default
-```
+The target triple selects broad architecture and ABI requirements. The CPU/platform description supplies cache geometry, relevant coherence granularity and sharing domains. A runtime-discovered geometry requires an allocation strategy valid for the discovered value. A missing fact must not silently become a 64-byte assumption. Reports name the target and the provenance of each fact; changing the target invalidates dependent placement conclusions.
 
 ### Conditional Layout
 
@@ -315,8 +300,8 @@ type WorkerState = {
     mutable counter: int64
 }
 
-// On x86-64: 64 bytes (padded to 64-byte line)
-// On Apple Silicon: 128 bytes (padded to 128-byte line)
+// With a declared 64-byte separation: 64-byte extent and alignment
+// With a declared 128-byte separation: 128-byte extent and alignment
 ```
 
 ## Integration with Verification Workflow
@@ -327,9 +312,9 @@ BAREWire layout information feeds into the verification workflow:
 2. **Debug info**: DWARF includes cache-relevant annotations
 3. **Runtime**: `perf c2c` collects HITM events
 4. **Analysis**: Events correlated with layout metadata
-5. **Report**: Confirms or refutes compile-time predictions
+5. **Report**: Tests predictions for the recorded workload and target. HITM can identify contention from true or false sharing; it is not independently a false-sharing proof.
 
-See `~/repos/Composer/docs/` for the verification workflow.
+See the [language's evaluation contract](../../clef-lang-spec/spec/expressions.md#default-demand-and-sharing) and the [CPU cache analysis](../../clef-lang-site/hugo/content/docs/internals/hardware/cache-aware-compilation-cpu.md). Default information explains settled facts. Optional performance advisories state assumptions and space/traffic tradeoffs; correctness and mandatory placement violations retain their owning diagnostics.
 
 ## Examples
 
@@ -367,17 +352,17 @@ let paddedCounters = Array.init 8 (fun _ -> { value = 0L })
 ### Example 3: Arena-Isolated Counters (Structural Isolation)
 
 ```fsharp
-// BEST: Each worker has its own arena
+// Separate ownership, subject to the arena's physical placement contract
 let spawnWorker () =
     Actor.spawn (fun () ->
         let arena = Arena.create 4096<bytes>
         let myCounter = Arena.alloc<int64> arena
         // myCounter is in a separate arena
-        // No other actor can access this cache line
+        // Line separation additionally needs aligned arena bases and extents
     )
 
 Array.init 8 (fun _ -> spawnWorker ())
-// 8 workers, 8 arenas, structural isolation
+// 8 workers, 8 owned arenas; queues and allocation metadata still coordinate
 ```
 
 ## Relationship to Other BAREWire Components
@@ -386,14 +371,14 @@ Array.init 8 (fun _ -> spawnWorker ())
 |-----------|--------------------------|
 | Memory Mapping | Layouts include alignment constraints |
 | Schema System | Cache annotations in schema definitions |
-| Hardware Descriptors | Peripheral regions are never cached |
+| Hardware Descriptors | Device memory attributes come from the platform's access contract |
 | IPC Integration | Shared memory regions cache-line aligned |
 
 ## Implementation Status
 
 | Feature | Status |
 |---------|--------|
-| Cache line size from target triple | Planned |
+| Cache geometry from CPU/platform facts | Planned |
 | `[<CacheLineAligned>]` attribute | Planned |
 | False sharing analysis | Planned |
 | Arena cache-line alignment | Planned |

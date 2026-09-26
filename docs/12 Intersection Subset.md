@@ -91,12 +91,17 @@ endpoint in `Hardware/Validator.fs`. Neither run produced an accepted native bin
 The historical native successes below establish those snapshots only.
 
 RoundTrip now also exercises Memory access rights and declared extents, and Schema
-wire sizes and an unresolved reference. `python3 tests/native_gate.py /path/to/Composer`
+wire sizes and an unresolved reference. `dotnet fsi tests/NativeGate.fsx -- /path/to/Composer`
 compiles a fresh artifact, requires zero exit status from compilation and execution,
 and compares exact stdout bytes with `expected.txt`. The oracle is never generated
-by either test gate. `python3 tests/native_gate_tests.py` checks rejection of compiler
+by either test gate. `dotnet fsi tests/NativeGateTests.fsx` checks rejection of compiler
 failure, a nonzero program exit despite matching output, stale or missing artifacts,
-a missing oracle, a differing transcript, and a nonterminating program.
+a missing oracle, a differing transcript (including whitespace and non-text
+bytes), and a nonterminating program. Linux checks also require cleanup when an
+exited parent leaves an orphan holding a redirected pipe. The .NET driver builds
+its reusable process host into private outputs and preserves full `-k` artifacts
+and raw logs in a unique run directory; see the [gate commands](../README.md#gates).
+Driver-fixture passes do not establish a new native RoundTrip result.
 
 These gates check cross-layer agreement. The external obligation serialization and
 ledger remain verification scaffolding for the proof-carrying PSG's joint constraint

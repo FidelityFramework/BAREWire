@@ -42,9 +42,24 @@ Everything above compiles under all three compilers from one source. The rules t
 | --- | --- |
 | .NET | `dotnet run --project tests/BAREWire.Tests.fsproj` (golden-frame vectors, envelope, validator, observers) |
 | JavaScript | `fable src/BAREWire.Fable.fsproj --outDir out && echo '{"type":"module"}' > out/package.json && node tests/js/roundtrip.mjs out && node tests/js/tiers.mjs out` |
-| Native | `python3 tests/native_gate.py /path/to/Composer` (compile, require successful execution, compare exact transcript) |
+| Native | `dotnet fsi tests/NativeGate.fsx -- /path/to/Composer` (compile, require successful execution, compare exact transcript bytes) |
+| Native driver checks | `dotnet fsi tests/NativeGateTests.fsx` (independent .NET fixtures; no Composer build or native acceptance claim) |
 
 The three transcripts agree on the same values; that agreement is the cross-substrate byte-identity claim made testable ([Readiness Audit](docs/Readiness%20Audit.md) §4 step 4).
+
+The native driver uses the .NET 10 SDK and the sibling Composer repository's
+`tests/Infrastructure/ProcessHost/ProcessHost.fsproj`. It builds only that small
+host into private outputs, then starts compiler and native jobs as external
+processes. Use `--process-host-project /path/to/ProcessHost.fsproj` for another
+checkout. It does not build Composer or run its graph in driver threads.
+
+Each run owns a unique directory under `/tmp/barewire-native` (override its parent
+with `--results directory`), with separate raw stdout/stderr logs, a fresh native
+artifact, the independent expected bytes and all `-k` compiler artifacts through
+`--artifacts-dir`. `--timeout seconds` defaults to 180 per compiler/native job.
+The sample remains the working directory; simultaneous jobs with other external
+side effects require their own isolation. Linux jobs use the shared host's
+process group so a timeout also terminates orphaned descendants holding a pipe.
 
 ## Where it is used
 
