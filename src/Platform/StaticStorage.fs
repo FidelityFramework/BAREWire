@@ -41,12 +41,12 @@ module StaticStorage =
     [<Literal>]
     let private MaxOffset = 9223372036854775807L
 
-    let private powerOfTwo (value: int) : bool =
+    let internal powerOfTwo (value: int) : bool =
         value > 0 && (value &&& (value - 1)) = 0
 
     // Subtract before adding: both alignment padding and endpoints must remain
     // exact even for declarations at the limit of this implementation's int64.
-    let private alignUp (value: int64) (alignment: int) : int64 option =
+    let internal alignUp (value: int64) (alignment: int) : int64 option =
         let unit = int64 alignment
         let remainder = value % unit
         let padding = if remainder = 0L then 0L else unit - remainder
@@ -117,3 +117,132 @@ module StaticStorage =
                     Error (finding space.Name "capacity-exceeded" "granularity padding exceeds the declared space capacity")
                 | Some allocated ->
                     Ok { Space = space.Name; Placements = placements; UsedSize = cursor; AllocationSize = allocated; Alignment = space.Alignment }
+
+/// A complete source inventory awaiting physical placement. PayloadSize is the
+/// sum of object extents only. Neither it nor successful reservation establishes
+/// section padding, addresses, or the capacity of the final linked image.
+type WritableReservation = {
+    Space: MemorySpace
+    Requests: StorageRequest array
+    PayloadSize: int64
+}
+
+/// One actual object in a linked writable region. The backend obtains this
+/// record from its artifact, not from the reservation it is checking.
+type WritableObject = {
+    Name: string
+    Address: int64
+    Length: int64
+}
+
+/// The complete mapped region, including linker/runtime objects and padding.
+/// Section identifies the backend's explicit correspondence for the declared
+/// space. A .data declaration cannot stand for an observed .bss by permission.
+type WritableRegion = {
+    Section: string
+    Address: int64
+    Length: int64
+    Allocated: bool
+    Access: Access
+    Objects: WritableObject array
+}
+
+type WritableCommitment = {
+    Space: string
+    Section: string
+    Address: int64
+    UsedSize: int64
+    AllocationSize: int64
+    Objects: WritableObject array
+}
+
+/// Writable program storage has two boundaries: source inventory reservation,
+/// then exact artifact commitment. Independent globals acquire no pooled
+/// offsets from the read-only StaticStorage plan.
+module WritableStorage =
+    let private fail subject kind message =
+        Error [| { Subject = subject; Kind = kind; Message = message } |]
+
+    /// Reject impossible inventories without claiming an eventual placement.
+    let reserve (space: MemorySpace) (requests: StorageRequest array) : Result<WritableReservation, StorageFinding array> =
+        if space.Name = "" then fail space.Name "invalid-space" "a storage space must have a name"
+        elif space.Kind <> MemoryKind.Data && space.Kind <> MemoryKind.Bss && space.Kind <> MemoryKind.Sram then
+            fail space.Name "unsupported-space" "writable program storage requires a data, bss or sram space"
+        elif space.Growth <> Growth.Fixed then fail space.Name "unsupported-growth" "program storage requires fixed growth"
+        elif space.Access <> Access.ReadWrite then fail space.Name "unsupported-access" "program storage requires read-write access"
+        elif space.Capacity <= 0L then fail space.Name "invalid-capacity" "space capacity must be positive"
+        elif not (StaticStorage.powerOfTwo space.Alignment) then fail space.Name "invalid-alignment" "space alignment must be a positive power of two"
+        elif not (StaticStorage.powerOfTwo space.Granularity) then fail space.Name "invalid-granularity" "space granularity must be a positive power of two"
+        elif space.Base |> Option.exists (fun address -> address < 0L || address % int64 space.Alignment <> 0L) then
+            fail space.Name "invalid-base" "a declared origin must be nonnegative and aligned"
+        else
+            let mutable total = 0L
+            let mutable issues = [||]
+            let mutable names: string array = [||]
+            for request in requests do
+                if Array.isEmpty issues then
+                    if request.Name = "" then issues <- [| { Subject = request.Name; Kind = "invalid-name"; Message = "an allocation must have a name" } |]
+                    elif Array.contains request.Name names then issues <- [| { Subject = request.Name; Kind = "duplicate-name"; Message = "allocation names must be unique within a space" } |]
+                    elif request.Length <= 0L then issues <- [| { Subject = request.Name; Kind = "invalid-length"; Message = "an allocation must have a positive extent" } |]
+                    elif not (StaticStorage.powerOfTwo request.Alignment) || space.Alignment % request.Alignment <> 0 then
+                        issues <- [| { Subject = request.Name; Kind = "unsupported-alignment"; Message = "the declared space does not guarantee this object's alignment" } |]
+                    elif request.Length > space.Capacity - total then
+                        issues <- [| { Subject = request.Name; Kind = "capacity-exceeded"; Message = "the complete inventory payload exceeds the space capacity before placement" } |]
+                    else
+                        names <- Array.append names [| request.Name |]
+                        total <- total + request.Length
+            if Array.isEmpty issues then Ok { Space = space; Requests = Array.copy requests; PayloadSize = total }
+            else Error issues
+
+    /// Commit only an independently observed complete region. expectedSection
+    /// is supplied by the selected backend's explicit declared-space mapping.
+    /// Additional runtime objects are covered by the whole region extent.
+    let commit (reservation: WritableReservation) (expectedSection: string) (region: WritableRegion) : Result<WritableCommitment, StorageFinding array> =
+        let space = reservation.Space
+        match reserve space reservation.Requests with
+        | Error errors -> Error errors
+        | Ok current when current.PayloadSize <> reservation.PayloadSize -> fail space.Name "stale-reservation" "the reservation payload no longer agrees with its inventory"
+        | Ok _ ->
+            if expectedSection = "" || region.Section <> expectedSection then fail space.Name "wrong-section" "the observed region does not match the declared-space section correspondence"
+            elif not region.Allocated || region.Access <> Access.ReadWrite then fail space.Name "wrong-permissions" "the observed region must be allocated and read-write"
+            elif region.Address < 0L || region.Length < 0L || region.Length > System.Int64.MaxValue - region.Address then fail space.Name "invalid-region" "the region must have an exact nonnegative address and extent"
+            elif region.Address % int64 space.Alignment <> 0L then fail space.Name "unaligned-region" "the observed region origin does not meet the declared alignment"
+            elif space.Base |> Option.exists ((<>) region.Address) then fail space.Name "wrong-base" "the observed region does not begin at the declared base"
+            else
+                match StaticStorage.alignUp region.Length space.Granularity with
+                | None -> fail space.Name "extent-overflow" "region granularity exceeds the exact extent representation"
+                | Some allocated when allocated > space.Capacity -> fail space.Name "capacity-exceeded" "the complete observed region including padding exceeds the declared capacity"
+                | Some allocated ->
+                    let mutable issues = [||]
+                    let mutable selected: WritableObject array = [||]
+                    // Every observed object belongs to this complete region,
+                    // including runtime objects outside the source inventory.
+                    // Malformed extents cannot hide a partial overlap.
+                    for actual in region.Objects do
+                        if Array.isEmpty issues &&
+                           (actual.Length <= 0L || actual.Address < region.Address ||
+                            actual.Address > region.Address + region.Length ||
+                            actual.Length > region.Address + region.Length - actual.Address) then
+                            issues <- [| { Subject = actual.Name; Kind = "outside-region"; Message = "an observed object has no complete extent within its advertised region" } |]
+                    for request in reservation.Requests do
+                        if Array.isEmpty issues then
+                            let found = region.Objects |> Array.filter (fun item -> item.Name = request.Name)
+                            let issue kind message = issues <- [| { Subject = request.Name; Kind = kind; Message = message } |]
+                            if Array.length found = 1 then
+                                let actual = Array.get found 0
+                                if actual.Length <> request.Length then issue "wrong-extent" "the emitted object extent differs from its source inventory"
+                                elif actual.Address < region.Address || actual.Address > region.Address + region.Length || actual.Length > region.Address + region.Length - actual.Address then
+                                    issue "outside-region" "the emitted object is not contained in its declared region"
+                                elif actual.Address % int64 request.Alignment <> 0L then issue "unaligned-object" "the emitted object does not meet its source alignment"
+                                elif selected |> Array.exists (fun other -> actual.Address < other.Address + other.Length && other.Address < actual.Address + actual.Length) then
+                                    issue "overlap" "distinct source allocations overlap in the artifact"
+                                elif region.Objects |> Array.exists (fun other ->
+                                    other.Name <> actual.Name && other.Length > 0L && other.Address >= region.Address &&
+                                    other.Address <= region.Address + region.Length && other.Length <= region.Address + region.Length - other.Address &&
+                                    actual.Address < other.Address + other.Length && other.Address < actual.Address + actual.Length) then
+                                    issue "overlap" "a source allocation overlaps another artifact object"
+                                else selected <- Array.append selected [| actual |]
+                            else issue "missing-or-duplicate-object" "each source allocation must identify exactly one emitted object"
+                    if not (Array.isEmpty issues) then Error issues
+                    else Ok { Space = space.Name; Section = region.Section; Address = region.Address
+                              UsedSize = region.Length; AllocationSize = allocated; Objects = selected }

@@ -69,3 +69,73 @@ let run () =
     bytesEqual "placement maps a value into its actual pool bytes" contents[1] bytes[8..15]
     bytesEqual "placement leaves inter-allocation padding" (Array.zeroCreate 5) bytes[3..7]
     equal "placement reserves untouched tail padding" true (bytes[17..] |> Array.forall ((=) 0uy))
+
+    // Independently placed writable globals do not inherit the read-only pool
+    // offsets. Reservation is a preflight; only the actual whole-region check
+    // commits capacity, padding, permissions and source-object correspondence.
+    let writable = { space with Name = "data"; Kind = MemoryKind.Data; Access = Access.ReadWrite }
+    let reserved =
+        match WritableStorage.reserve writable [| request "first" 24L 8; request "second" 24L 8 |] with
+        | Ok value -> value
+        | Error findings -> failwithf "invalid writable fixture: %A" findings
+    equal "writable reservation accounts all requested payload" 48L reserved.PayloadSize
+    let region: WritableRegion = {
+        Section = ".data"; Address = 8192L; Length = 128L; Allocated = true; Access = Access.ReadWrite
+        Objects = [| { Name = "first"; Address = 8200L; Length = 24L }
+                     { Name = "second"; Address = 8256L; Length = 24L }
+                     { Name = "runtime"; Address = 8192L; Length = 8L } |]
+    }
+    let committed =
+        match WritableStorage.commit reserved ".data" region with
+        | Ok value -> value
+        | Error findings -> failwithf "invalid observed writable region: %A" findings
+    equal "artifact commitment includes runtime bytes and padding" 128L committed.UsedSize
+    equal "artifact commitment rounds the entire region" 4096L committed.AllocationSize
+    equal "artifact commitment retains actual independently placed addresses"
+        [| 8200L; 8256L |] (committed.Objects |> Array.map (fun value -> value.Address))
+    let refusesReservation label kind storage requests =
+        match WritableStorage.reserve storage requests with
+        | Error findings -> check label (Array.exists (fun finding -> finding.Kind = kind) findings) (sprintf "%A" findings)
+        | Ok value -> check label false (sprintf "unexpected reservation %A" value)
+    let refusesCommit label kind reservation actual =
+        match WritableStorage.commit reservation ".data" actual with
+        | Error findings -> check label (Array.exists (fun finding -> finding.Kind = kind) findings) (sprintf "%A" findings)
+        | Ok value -> check label false (sprintf "unexpected commitment %A" value)
+    refusesReservation "two objects each fitting can jointly exceed capacity" "capacity-exceeded"
+        { writable with Capacity = 40L; Granularity = 1 } [| request "a" 24L 8; request "b" 24L 8 |]
+    refusesReservation "writable inventory rejects duplicate names" "duplicate-name" writable [| request "a" 8L 8; request "a" 8L 8 |]
+    refusesReservation "writable inventory rejects nonpositive extent" "invalid-length" writable [| request "a" 0L 8 |]
+    refusesReservation "writable inventory rejects unprovided alignment" "unsupported-alignment" { writable with Alignment = 4 } [| request "a" 8L 8 |]
+    refusesReservation "read-only declaration cannot authorize mutable storage" "unsupported-access" { writable with Access = Access.ReadOnly } [| request "a" 1L 1 |]
+    refusesCommit "data reservation cannot silently map to bss" "wrong-section" reserved { region with Section = ".bss" }
+    refusesCommit "nonallocated section cannot supply program storage" "wrong-permissions" reserved { region with Allocated = false }
+    refusesCommit "read-only artifact cannot supply initialized program storage" "wrong-permissions" reserved { region with Access = Access.ReadOnly }
+    refusesCommit "region origin must preserve declared alignment" "unaligned-region" reserved { region with Address = 8193L }
+    refusesCommit "complete region exceeds capacity although objects fit" "capacity-exceeded" reserved { region with Length = 4097L }
+    refusesCommit "tail granularity belongs to whole region" "capacity-exceeded"
+        { reserved with Space = { writable with Capacity = 128L } } region
+    refusesCommit "missing artifact source allocation fails" "missing-or-duplicate-object" reserved { region with Objects = [| region.Objects[0] |] }
+    refusesCommit "duplicate artifact source allocation fails" "missing-or-duplicate-object" reserved { region with Objects = Array.append region.Objects [| region.Objects[0] |] }
+    refusesCommit "changed artifact object extent fails" "wrong-extent" reserved
+        { region with Objects = [| { region.Objects[0] with Length = 16L }; region.Objects[1] |] }
+    refusesCommit "misaligned actual object fails" "unaligned-object" reserved
+        { region with Objects = [| { region.Objects[0] with Address = 8201L }; region.Objects[1] |] }
+    refusesCommit "out-of-region actual object fails" "outside-region" reserved
+        { region with Objects = [| region.Objects[0]; { region.Objects[1] with Address = 8320L } |] }
+    refusesCommit "different source objects may not overlap" "overlap" reserved
+        { region with Objects = [| region.Objects[0]; { region.Objects[1] with Address = 8216L } |] }
+    refusesCommit "runtime storage cannot alias source storage" "overlap" reserved
+        { region with Objects = Array.append region.Objects [| { Name = "runtime-other"; Address = 8208L; Length = 8L } |] }
+    refusesCommit "partially outside runtime object cannot hide overlap" "outside-region" reserved
+        { region with Objects = Array.append region.Objects [| { Name = "runtime-other"; Address = 8191L; Length = 20L } |] }
+    refusesCommit "runtime object extent cannot overflow" "outside-region" reserved
+        { region with Objects = Array.append region.Objects [| { Name = "runtime-other"; Address = 8319L; Length = System.Int64.MaxValue } |] }
+    refusesCommit "observed object extent must be positive" "outside-region" reserved
+        { region with Objects = Array.append region.Objects [| { Name = "runtime-other"; Address = 8192L; Length = -1L } |] }
+    refusesCommit "stale reservation payload fails" "stale-reservation" { reserved with PayloadSize = 1L } region
+    refusesCommit "declared fixed base remains authoritative" "wrong-base"
+        { reserved with Space = { writable with Base = Some 4096L } } region
+    refusesCommit "observed address endpoint cannot overflow" "invalid-region" reserved
+        { region with Address = System.Int64.MaxValue - 3L; Length = 8L }
+    let maximum = { writable with Capacity = System.Int64.MaxValue; Granularity = 1; Alignment = 1 }
+    refusesReservation "inventory summation cannot wrap" "capacity-exceeded" maximum [| request "a" System.Int64.MaxValue 1; request "b" 1L 1 |]
